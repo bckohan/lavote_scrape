@@ -34,3 +34,15 @@ All logic lives in `lavote_scrape/scrape.py`. The `scrape` Typer command:
 ## CI Behavior
 
 The workflow (`.github/workflows/scrape.yml`) uses `concurrency: cancel-in-progress` so each hourly trigger kills the previous run. It always passes `--no-moo --commit --max-runtime 3900`. The default election ID is `4338`; override via `workflow_dispatch` input.
+
+## Election Results Viewer
+
+`index.html` is a static single-page app served from the repo root.
+
+**Local dev**: Run `python3 -m http.server 8000` from the repo root, then open `http://localhost:8000`. A local HTTP server is required — opening as a `file://` URL will not work due to `fetch` calls.
+
+**GitHub Pages**: Served automatically from the `main` branch root. Enable in repo Settings → Pages → Source: Deploy from branch → `main` / `/ (root)`. No separate `gh-pages` branch needed.
+
+**index.json**: Maintained by the scraper. It is the manifest listing elections and result files. The `update_index()` and `backfill_index()` functions in `scrape.py` keep it current. When `--commit` is used, `index.json` is committed alongside each new result file.
+
+**Routing**: Hash-based. `#/` = contest index; `#/{eid}/{contestId}` = contest detail.

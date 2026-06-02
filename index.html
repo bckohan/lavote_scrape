@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LA County Election Results</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f0f1a; color: #e2e8f0; min-height: 100vh; }
+
+    /* ── Header ── */
+    .site-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #0a0a14; border-bottom: 1px solid #1e1e30; flex-wrap: wrap; }
+    .site-header h1 { font-size: 1rem; font-weight: 600; flex: 1; white-space: nowrap; }
+    #election-select { background: #1a1a2e; color: #e2e8f0; border: 1px solid #2a2a40; border-radius: 6px; padding: 5px 10px; font-size: 0.85rem; cursor: pointer; }
+
+    /* ── Search ── */
+    .search-wrap { padding: 10px 16px; border-bottom: 1px solid #1a1a2e; }
+    #search-input { width: 100%; background: #1a1a2e; color: #e2e8f0; border: 1px solid #2a2a40; border-radius: 6px; padding: 7px 12px; font-size: 0.9rem; }
+    #search-input::placeholder { color: #4a5568; }
+    #search-input:focus { outline: none; border-color: #3b82f6; }
+
+    /* ── Contest list ── */
+    .contest-group.hidden { display: none; }
+    .group-header { padding: 10px 16px 3px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
+    .contest-row { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #141420; cursor: pointer; gap: 10px; min-height: 52px; text-decoration: none; color: inherit; }
+    .contest-row:hover { background: #15152a; }
+    .contest-row.hidden { display: none; }
+    .contest-info { flex: 1; min-width: 0; }
+    .contest-title { display: block; font-size: 0.82rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contest-leader { display: block; font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+    .match-note { display: block; font-size: 0.68rem; color: #3b82f6; margin-top: 2px; font-style: italic; }
+    .sparkline-canvas { flex-shrink: 0; display: block; }
+
+    /* ── Detail screen ── */
+    .detail-header { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: #0a0a14; border-bottom: 1px solid #1e1e30; flex-wrap: wrap; }
+    #back-btn { background: none; border: 1px solid #2a2a40; color: #94a3b8; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; white-space: nowrap; flex-shrink: 0; }
+    #back-btn:hover { background: #1a1a2e; color: #e2e8f0; }
+    .detail-meta { min-width: 0; }
+    .detail-meta h2 { font-size: 0.92rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .detail-election-name { font-size: 0.72rem; color: #64748b; }
+    .chart-section { padding: 14px 16px 0; }
+    .chart-section + .chart-section { padding-top: 14px; }
+    .chart-label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; margin-bottom: 6px; }
+    .annotation { padding: 6px 16px 14px; font-size: 0.72rem; color: #475569; }
+
+    /* ── Loading / error ── */
+    .status-msg { padding: 32px 16px; text-align: center; color: #475569; font-size: 0.9rem; }
+
+    /* ── Detail view ── */
+    #detail-view { max-width: 900px; margin: 0 auto; padding: 1rem; }
+    .charts-container { display: flex; flex-direction: column; gap: 2rem; }
+    .chart-section h3 { margin: 0 0 0.5rem; color: #e2e8f0; font-size: 1rem; }
+    .chart-section .annotation { font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem; }
+    .chart-wrap { position: relative; height: 300px; }
+    @media (max-width: 480px) { .chart-wrap { height: 220px; } .detail-title h2 { font-size: 1.1rem; } #detail-view { padding-left: 0; padding-right: 0; } }
+
+    @media (min-width: 600px) {
+      .site-header { padding: 12px 24px; }
+      .search-wrap { padding: 10px 24px; }
+      .group-header { padding: 10px 24px 3px; }
+      .contest-row { padding: 10px 24px; }
+      .detail-header { padding: 11px 24px; }
+      .chart-section { padding: 16px 24px 0; }
+      .annotation { padding: 6px 24px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Index screen -->
+<div id="screen-index">
+  <header class="site-header">
+    <h1>LA County Election Results</h1>
+    <select id="election-select"></select>
+  </header>
+  <div class="search-wrap">
+    <input type="search" id="search-input" placeholder="Search contests or candidates…" autocomplete="off">
+  </div>
+  <main id="contest-list"><p class="status-msg">Loading…</p></main>
+</div>
+
+<!-- Detail screen -->
+<div id="screen-detail" hidden>
+  <header class="detail-header">
+    <button id="back-btn">← Back</button>
+    <div class="detail-meta">
+      <h2 id="detail-title"></h2>
+      <span class="detail-election-name" id="detail-election-name"></span>
+    </div>
+  </header>
+  <div id="detail-body"></div>
+</div>
+
+<script>
+// ─────────────────────────── Constants ───────────────────────────
+
+const PARTY_COLORS = {
+  'Democratic':            '#3b82f6',
+  'Republican':            '#ef4444',
+  'Green':                 '#22c55e',
+  'Libertarian':           '#eab308',
+  'Peace and Freedom':     '#a855f7',
+  'American Independent':  '#f97316',
+  'Non Partisan':          '#94a3b8',
+};
+const FALLBACK_COLORS = ['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb923c','#4ade80','#e879f9'];
+const OTHERS_COLOR = '#6b7280';
+
+function candidateColor(party, index) {
+  return PARTY_COLORS[party] || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+}
+
+// ─────────────────────────── State ───────────────────────────────
+
+const state = {
+  index: null,
+  currentEid: null,
+  elections: {},
+};
+window.__state = state;
+
+// ─────────────────────────── Utilities ───────────────────────────
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function encodeFilename(f) {
+  return f.split('/').map(seg => encodeURIComponent(seg)).join('/');
+}
+
+function parseLabel(filename) {
+  const m = filename.match(/_(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/);
+  if (!m) return filename;
+  const [, date, time] = m;
+  const [, mo, dy] = date.split('-');
+  return `${parseInt(mo)}/${parseInt(dy)} ${time}`;
+}
+
+// ─────────────────────────── Data loading ────────────────────────
+
+async function loadIndex() {
+  const resp = await fetch('index.json');
+  if (!resp.ok) throw new Error(`index.json: ${resp.status}`);
+  state.index = await resp.json();
+}
+
+function buildLookups(meta) {
+  const candidateById = new Map();
+  const contestById   = new Map();
+  const groupOrder    = [];
+
+  for (const group of meta.Data.ContestGroups) {
+    const contestIds = [];
+    for (const contest of group.Contests) {
+      const candidateIds = [];
+      for (const c of contest.Candidates) {
+        candidateById.set(c.ID, { name: c.Name, party: c.Party || '' });
+        candidateIds.push(c.ID);
+      }
+      contestById.set(contest.ID, {
+        title: contest.Title,
+        groupName: group.Name,
+        candidateIds,
+      });
+      contestIds.push(contest.ID);
+    }
+    groupOrder.push({ name: group.Name, contestIds });
+  }
+
+  return { candidateById, contestById, groupOrder };
+}
+
+function buildTimeSeries(filenames, responses, contestById) {
+  const drops = filenames
+    .map((f, i) => ({ filename: f, resp: responses[i] }))
+    .filter(({ resp }) => resp && Array.isArray(resp.Data))
+    .sort((a, b) => a.filename < b.filename ? -1 : 1);
+
+  const parsedDrops = drops.map(({ filename, resp }) => {
+    const voteMap = new Map();
+    for (const row of resp.Data) {
+      if (row.ReferenceType === 'CAND') voteMap.set(row.ReferenceID, row.Value);
+    }
+    return { ts: parseLabel(filename), voteMap };
+  });
+
+  const series = new Map();
+  for (const [contestId, contest] of contestById) {
+    series.set(contestId, parsedDrops.map(({ ts, voteMap }) => {
+      const votes = {};
+      for (const cid of contest.candidateIds) votes[cid] = voteMap.get(cid) ?? 0;
+      return { ts, votes };
+    }));
+  }
+
+  return series;
+}
+
+async function loadElection(eid) {
+  if (state.elections[eid]) return state.elections[eid];
+
+  const entry = state.index[eid];
+  const [meta, ...resultResps] = await Promise.all([
+    fetch(encodeFilename(entry.meta_file)).then(r => r.json()),
+    ...entry.result_files.map(f =>
+      fetch(encodeFilename(f)).then(r => r.json()).catch(() => null)
+    ),
+  ]);
+
+  const { candidateById, contestById, groupOrder } = buildLookups(meta);
+  const series = buildTimeSeries(entry.result_files, resultResps, contestById);
+
+  state.elections[eid] = { candidateById, contestById, groupOrder, series,
+                           title: entry.title, election_date: entry.election_date };
+  return state.elections[eid];
+}
+
+// ─────────────────────────── Router + init ───────────────────────
+
+function parseHash() {
+  const hash = location.hash.replace(/^#\/?/, '');
+  if (!hash) return { screen: 'index' };
+  const parts = hash.split('/');
+  if (parts.length === 2) return { screen: 'detail', eid: parts[0], contestId: parseInt(parts[1]) };
+  return { screen: 'index' };
+}
+
+async function route() {
+  const { screen, eid, contestId } = parseHash();
+
+  if (screen === 'detail') {
+    const resolvedEid = eid || state.currentEid;
+    if (!state.elections[resolvedEid]) await loadElection(resolvedEid);
+    renderDetail(resolvedEid, contestId);
+  } else {
+    if (!state.elections[state.currentEid]) await loadElection(state.currentEid);
+    renderIndex();
+  }
+}
+
+async function init() {
+  try {
+    await loadIndex();
+
+    const eids = Object.keys(state.index).sort((a, b) => parseInt(b) - parseInt(a));
+    state.currentEid = eids[0];
+
+    const sel = document.getElementById('election-select');
+    for (const e of eids) {
+      const opt = document.createElement('option');
+      opt.value = e;
+      opt.textContent = `${state.index[e].title} (${state.index[e].election_date})`;
+      if (e === state.currentEid) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener('change', async () => {
+      state.currentEid = sel.value;
+      if (!state.elections[state.currentEid]) await loadElection(state.currentEid);
+      location.hash = '#/';
+    });
+
+    document.getElementById('search-input').addEventListener('input', e => {
+      filterContests(e.target.value);
+    });
+
+    document.getElementById('back-btn').addEventListener('click', () => {
+      location.hash = '#/';
+    });
+
+    window.addEventListener('hashchange', route);
+    await route();
+  } catch (err) {
+    document.getElementById('contest-list').innerHTML =
+      `<p class="status-msg">Error loading data: ${err.message}</p>`;
+    console.error(err);
+  }
+}
+
+// ─────────────────────────── Helpers ─────────────────────────────
+
+function getLeader(contestId, electionData) {
+  const { candidateById, contestById, series } = electionData;
+  const contest = contestById.get(contestId);
+  const points = series.get(contestId);
+  if (!points || points.length === 0) return { name: '—', pct: 0, sparkData: [], party: '' };
+
+  const lastVotes = points[points.length - 1].votes;
+  const total = Object.values(lastVotes).reduce((s, v) => s + v, 0);
+
+  let topId = null, topVotes = -1;
+  for (const cid of contest.candidateIds) {
+    if ((lastVotes[cid] ?? 0) > topVotes) { topVotes = lastVotes[cid] ?? 0; topId = cid; }
+  }
+
+  const cand = topId ? candidateById.get(topId) : null;
+  const pct = total > 0 ? (topVotes / total * 100).toFixed(1) : '0.0';
+
+  const step = Math.max(1, Math.floor(points.length / 8));
+  const sparkData = points
+    .filter((_, i) => i % step === 0 || i === points.length - 1)
+    .map(p => {
+      const t = Object.values(p.votes).reduce((s, v) => s + v, 0);
+      return t > 0 ? (p.votes[topId] ?? 0) / t * 100 : 0;
+    });
+
+  return { name: cand?.name ?? '—', pct, sparkData, party: cand?.party ?? '' };
+}
+
+let sparklineCharts = [];
+let activeCharts = [];
+
+function destroySparklines() {
+  sparklineCharts.forEach(c => c.destroy());
+  sparklineCharts = [];
+}
+
+function destroyActiveCharts() {
+  activeCharts.forEach(c => c.destroy());
+  activeCharts = [];
+}
+
+function getQualifying(contestId, electionData) {
+  const seriesData = electionData.series.get(contestId);
+  if (!seriesData || seriesData.length === 0) return null;
+
+  const finalVotes = seriesData[seriesData.length - 1].votes;
+  const contestTotal = Object.values(finalVotes).reduce((s, v) => s + v, 0);
+  if (contestTotal === 0) return null;
+
+  const contest = electionData.contestById.get(contestId);
+  if (!contest) return null;
+
+  const qualified = [];
+  const others = [];
+
+  for (const cid of contest.candidateIds) {
+    const v = finalVotes[cid] || 0;
+    if (v / contestTotal >= 0.05) {
+      qualified.push(cid);
+    } else {
+      others.push(cid);
+    }
+  }
+
+  // Sort qualified descending by final votes
+  qualified.sort((a, b) => (finalVotes[b] || 0) - (finalVotes[a] || 0));
+
+  if (qualified.length === 0) return null;
+
+  return { qualified, others, contestTotal, series: seriesData, finalVotes };
+}
+
+function drawSparkline(canvas, data, party) {
+  sparklineCharts.push(new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.map((_, i) => i),
+      datasets: [{ data, borderColor: candidateColor(party, 0), borderWidth: 1.5,
+                   pointRadius: 0, tension: 0.3, fill: false }],
+    },
+    options: {
+      responsive: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { display: false }, y: { display: false } },
+    },
+  }));
+}
+
+// ─────────────────────────── Render functions ────────────────────
+
+function renderIndex() {
+  destroySparklines();
+  document.getElementById('screen-index').hidden = false;
+  document.getElementById('screen-detail').hidden = true;
+
+  const eid = state.currentEid;
+  const el = state.elections[eid];
+  const list = document.getElementById('contest-list');
+  list.innerHTML = '';
+
+  for (const group of el.groupOrder) {
+    const section = document.createElement('section');
+    section.className = 'contest-group';
+    section.dataset.group = group.name;
+
+    const header = document.createElement('h3');
+    header.className = 'group-header';
+    header.textContent = group.name;
+    section.appendChild(header);
+
+    for (const contestId of group.contestIds) {
+      const contest = el.contestById.get(contestId);
+      const { name, pct, sparkData, party } = getLeader(contestId, el);
+
+      const row = document.createElement('div');
+      row.className = 'contest-row';
+      row.dataset.eid = eid;
+      row.dataset.contestId = contestId;
+      row.dataset.title = contest.title.toLowerCase();
+
+      row.innerHTML = `
+        <div class="contest-info">
+          <span class="contest-title">${escHtml(contest.title)}</span>
+          <span class="contest-leader">${escHtml(name)} ${pct}%</span>
+        </div>
+        <canvas class="sparkline-canvas" width="72" height="28"></canvas>
+      `;
+
+      row.addEventListener('click', () => {
+        location.hash = `#/${eid}/${contestId}`;
+      });
+
+      section.appendChild(row);
+
+      if (sparkData.length > 1) {
+        requestAnimationFrame(() => {
+          const canvas = row.querySelector('.sparkline-canvas');
+          drawSparkline(canvas, sparkData, party);
+        });
+      }
+    }
+
+    list.appendChild(section);
+  }
+
+  const q = document.getElementById('search-input').value;
+  if (q) filterContests(q);
+}
+
+function renderDetail(eid, contestId) {
+  destroyActiveCharts();
+
+  document.getElementById('screen-index').hidden = true;
+  document.getElementById('screen-detail').hidden = false;
+
+  const electionData = state.elections[eid];
+  if (!electionData) {
+    document.getElementById('detail-body').innerHTML =
+      '<p class="status-msg">No data loaded for this election.</p>';
+    return;
+  }
+
+  if (!Number.isFinite(contestId)) {
+    document.getElementById('detail-body').innerHTML =
+      '<p class="status-msg">Invalid contest.</p>';
+    return;
+  }
+  const contest = electionData.contestById.get(contestId);
+  if (!contest) {
+    document.getElementById('detail-body').innerHTML =
+      '<p class="status-msg">Contest not found.</p>';
+    return;
+  }
+
+  const qualifying = getQualifying(contestId, electionData);
+  if (!qualifying || qualifying.qualified.length === 0) {
+    document.getElementById('detail-body').innerHTML =
+      '<p class="status-msg">No results available.</p>';
+    return;
+  }
+
+  const { qualified, others, series } = qualifying;
+  const { candidateById } = electionData;
+
+  // Build the detail screen HTML
+  document.getElementById('detail-title').textContent = contest.title;
+  document.getElementById('detail-election-name').textContent = electionData.title || '';
+
+  document.getElementById('detail-body').innerHTML = `
+    <div id="detail-view">
+      <div class="charts-container">
+        <div class="chart-section">
+          <h3>Cumulative Vote Share</h3>
+          <div class="annotation" id="annotation-text"></div>
+          <div class="chart-wrap"><canvas id="chart-line"></canvas></div>
+        </div>
+        <div class="chart-section">
+          <h3>Batch Composition</h3>
+          <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // X-axis labels: use ts field from series entries
+  const lineLabels = series.map(entry => entry.ts);
+
+  // Build line chart datasets
+  const lineDatasets = qualified.map((cid, idx) => {
+    const cand = candidateById.get(cid);
+    const color = PARTY_COLORS[cand?.party] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+    const data = series.map(entry => {
+      const runningTotal = Object.values(entry.votes).reduce((s, v) => s + v, 0);
+      return runningTotal > 0 ? (entry.votes[cid] || 0) / runningTotal * 100 : 0;
+    });
+    return {
+      label: cand?.name || String(cid),
+      data,
+      borderColor: color,
+      backgroundColor: color,
+      fill: false,
+      tension: 0.1,
+      pointRadius: 4,
+      borderWidth: 2,
+    };
+  });
+
+  if (others.length > 0) {
+    const othersData = series.map(entry => {
+      const runningTotal = Object.values(entry.votes).reduce((s, v) => s + v, 0);
+      const othersVotes = others.reduce((s, cid) => s + (entry.votes[cid] || 0), 0);
+      return runningTotal > 0 ? othersVotes / runningTotal * 100 : 0;
+    });
+    lineDatasets.push({
+      label: 'All Others',
+      data: othersData,
+      borderColor: OTHERS_COLOR,
+      backgroundColor: OTHERS_COLOR,
+      fill: false,
+      tension: 0.1,
+      pointRadius: 3,
+      borderWidth: 2,
+      borderDash: [5, 5],
+    });
+  }
+
+  // Set annotation text
+  const N = qualified.length;
+  const M = qualified.length + others.length;
+  const X = others.length;
+  const annotationEl = document.getElementById('annotation-text');
+  if (X === 0) {
+    annotationEl.textContent = `Showing ${N} of ${M} candidates (≥5% final share).`;
+  } else {
+    annotationEl.textContent = `Showing ${N} of ${M} candidates (≥5% final share). ${X} candidate${X !== 1 ? 's' : ''} aggregated into "All Others".`;
+  }
+
+  // Render line chart
+  const lineCanvas = document.getElementById('chart-line');
+  activeCharts.push(new Chart(lineCanvas, {
+    type: 'line',
+    data: { labels: lineLabels, datasets: lineDatasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, color: '#e2e8f0' } },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
+        y: {
+          min: 0,
+          max: 100,
+          title: { display: true, text: 'Vote Share (%)', color: '#94a3b8' },
+          ticks: { color: '#94a3b8' },
+          grid: { color: '#1e293b' },
+        },
+      },
+    },
+  }));
+
+  // Build bar chart — one bar per drop after the first (indices 1..n-1)
+  if (series.length >= 2) {
+    const barLabels = series.slice(1).map(entry => entry.ts);
+
+    const barDatasets = qualified.map((cid, idx) => {
+      const cand = candidateById.get(cid);
+      const color = PARTY_COLORS[cand?.party] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+      const data = series.slice(1).map((entry, i) => {
+        const prev = series[i];
+        const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
+          return s + ((entry.votes[k] || 0) - (prev.votes[k] || 0));
+        }, 0);
+        const batchVotes = (entry.votes[cid] || 0) - (prev.votes[cid] || 0);
+        return batchTotal > 0 ? batchVotes / batchTotal * 100 : 0;
+      });
+      return {
+        label: cand?.name || String(cid),
+        data,
+        backgroundColor: color,
+        stack: 'stack',
+      };
+    });
+
+    if (others.length > 0) {
+      const othersBarData = series.slice(1).map((entry, i) => {
+        const prev = series[i];
+        const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
+          return s + ((entry.votes[k] || 0) - (prev.votes[k] || 0));
+        }, 0);
+        const othersBatch = others.reduce((s, cid) => {
+          return s + ((entry.votes[cid] || 0) - (prev.votes[cid] || 0));
+        }, 0);
+        return batchTotal > 0 ? othersBatch / batchTotal * 100 : 0;
+      });
+      barDatasets.push({
+        label: 'All Others',
+        data: othersBarData,
+        backgroundColor: OTHERS_COLOR,
+        stack: 'stack',
+      });
+    }
+
+    const barCanvas = document.getElementById('chart-bar');
+    activeCharts.push(new Chart(barCanvas, {
+      type: 'bar',
+      data: { labels: barLabels, datasets: barDatasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 12, color: '#e2e8f0' } },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            ticks: { color: '#94a3b8', maxRotation: 45 },
+            grid: { color: '#1e293b' },
+          },
+          y: {
+            stacked: true,
+            min: 0,
+            max: 100,
+            title: { display: true, text: 'Share of New Votes (%)', color: '#94a3b8' },
+            ticks: { color: '#94a3b8' },
+            grid: { color: '#1e293b' },
+          },
+        },
+      },
+    }));
+  } else {
+    document.querySelector('#detail-view .chart-section:last-child').innerHTML =
+      '<h3>Batch Composition</h3><p class="status-msg">Not enough drops for batch analysis.</p>';
+  }
+}
+
+function filterContests(query) {
+  const q = query.toLowerCase().trim();
+  const eid = state.currentEid;
+  const el = state.elections[eid];
+
+  document.querySelectorAll('.contest-row').forEach(row => {
+    const contestId = parseInt(row.dataset.contestId);
+    const contest = el?.contestById.get(contestId);
+
+    row.querySelector('.match-note')?.remove();
+
+    if (!q) {
+      row.classList.remove('hidden');
+      return;
+    }
+
+    const titleMatch = row.dataset.title.includes(q);
+    const matchingCands = (contest?.candidateIds || [])
+      .map(cid => el.candidateById.get(cid))
+      .filter(c => c?.name.toLowerCase().includes(q));
+
+    const visible = titleMatch || matchingCands.length > 0;
+    row.classList.toggle('hidden', !visible);
+
+    if (visible && !titleMatch && matchingCands.length > 0) {
+      const note = document.createElement('span');
+      note.className = 'match-note';
+      note.textContent = matchingCands.map(c => c.name).join(', ');
+      row.querySelector('.contest-info').appendChild(note);
+    }
+  });
+
+  document.querySelectorAll('.contest-group').forEach(group => {
+    const anyVisible = [...group.querySelectorAll('.contest-row')]
+      .some(r => !r.classList.contains('hidden'));
+    group.classList.toggle('hidden', !anyVisible);
+  });
+}
+
+// ─────────────────────────── Boot ────────────────────────────────
+
+init();
+</script>
+</body>
+</html>
