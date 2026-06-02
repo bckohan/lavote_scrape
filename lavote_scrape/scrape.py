@@ -50,7 +50,14 @@ def scrape(
     commit: t.Annotated[
         bool, Option(help="git commit & push each new results file")
     ] = False,
+    max_runtime: t.Annotated[
+        int,
+        Option(
+            help="Exit cleanly after this many seconds (0 = run forever)"
+        ),
+    ] = 0,
 ):
+    started = time.monotonic()
     last_timestamp = None
     result_files = glob(f"{eid}_*.json")
     if result_files:
@@ -74,6 +81,10 @@ def scrape(
             print(f"New Results {filename}")
             if commit:
                 git_commit(filename)
+
+        if max_runtime and time.monotonic() - started >= max_runtime:
+            print(f"Reached max runtime of {max_runtime}s, exiting.")
+            break
 
         print("Sleeping...")
         time.sleep(delay)

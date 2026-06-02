@@ -1,11 +1,12 @@
 name: Scrape Election Results
 
 on:
-  # 03:00 UTC on June 3 == 8:00 PM PDT on June 2 (tonight).
-  # GitHub runs schedules only from the default branch and may delay the
-  # start by a few minutes under load.
+  # Restart every hour, on the hour. GitHub caps a single job at 6h, so we
+  # relaunch hourly instead of running one forever; each new run cancels the
+  # previous one (see `concurrency` below). Schedules run only from the
+  # default branch and may be delayed a few minutes under load.
   schedule:
-    - cron: "0 3 3 6 *"
+    - cron: "0 * * * *"
   # Allow kicking it off (or re-starting it) by hand.
   workflow_dispatch:
     inputs:
@@ -20,16 +21,17 @@ on:
 permissions:
   contents: write
 
-# Never run two scrapers against the same repo at once.
+# One scraper at a time: when the hourly run fires, cancel the previous one.
 concurrency:
   group: scrape-results
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    # GitHub caps a job at 360 min; leave headroom and end cleanly.
-    timeout-minutes: 350
+    # Backstop in case an hourly trigger is delayed; the scraper also
+    # self-exits via --max-runtime below.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
@@ -45,8 +47,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Scrape and commit
+        # Self-exit after ~65 min so the job ends cleanly before the next
+        # hourly run takes over (and well under the 75 min job timeout).
         run: >
           uv run scrape ${{ github.event.inputs.eid || '4338' }}
           --delay ${{ github.event.inputs.delay || '60' }}
           --no-moo
           --commit
+          --max-runtime 3900
