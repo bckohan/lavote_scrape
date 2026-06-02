@@ -64,6 +64,17 @@ def scrape(
         last_file = sorted(result_files)[-1]
         last_timestamp = parse(last_file.split("_")[1].split(".")[0])
 
+    election_file = f"election_{eid}.json"
+    if not Path(election_file).exists():
+        election = requests.get(
+            f"https://results.lavote.gov/ElectionResults/GetElectionData?electionID={eid}"
+        ).json()
+        with open(election_file, "w") as f:
+            json.dump(election, f)
+        print(f"Saved election metadata {election_file}")
+        if commit:
+            git_commit(election_file)
+
     while True:
         results = requests.get(
             f"https://results.lavote.gov/ElectionResults/GetCounterData?electionID={eid}"
