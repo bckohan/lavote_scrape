@@ -1,24 +1,25 @@
-[tool.poetry]
+[project]
 name = "lavote-scrape"
 version = "0.1.0"
 description = "Scrape la county election results"
-authors = ["Brian Kohan <bckohan@gmail.com>"]
+authors = [{ name = "Brian Kohan", email = "bckohan@gmail.com" }]
 readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.32.3",
+    "typer>=0.12.5",
+    "dateutils>=0.6.12",
+    "python-vlc>=3.0.21203",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-requests = "^2.32.3"
-typer = "^0.12.5"
-dateutils = "^0.6.12"
-python-vlc = "^3.0.21203"
-
-
-[tool.poetry.scripts]
+[project.scripts]
 scrape = "lavote_scrape.scrape:main"
 
-[tool.poetry.group.dev.dependencies]
-ipdb = "^0.13.13"
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"

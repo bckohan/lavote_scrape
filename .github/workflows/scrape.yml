@@ -1,0 +1,52 @@
+name: Scrape Election Results
+
+on:
+  # 03:00 UTC on June 3 == 8:00 PM PDT on June 2 (tonight).
+  # GitHub runs schedules only from the default branch and may delay the
+  # start by a few minutes under load.
+  schedule:
+    - cron: "0 3 3 6 *"
+  # Allow kicking it off (or re-starting it) by hand.
+  workflow_dispatch:
+    inputs:
+      eid:
+        description: Election ID
+        default: "4338"
+      delay:
+        description: Poll delay in seconds
+        default: "60"
+
+# Needed so the running job can push the JSON files back to main.
+permissions:
+  contents: write
+
+# Never run two scrapers against the same repo at once.
+concurrency:
+  group: scrape-results
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    # GitHub caps a job at 360 min; leave headroom and end cleanly.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --no-dev
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Scrape and commit
+        run: >
+          uv run scrape ${{ github.event.inputs.eid || '4338' }}
+          --delay ${{ github.event.inputs.delay || '60' }}
+          --no-moo
+          --commit
