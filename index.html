@@ -557,7 +557,7 @@ function renderDetail(eid, contestId) {
           <div class="chart-wrap"><canvas id="chart-line"></canvas></div>
         </div>
         <div class="chart-section" id="batch-section">
-          <h3>Vote Share by Drop</h3>
+          <h3>Batch Composition</h3>
           <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
         </div>
         <div class="chart-section" id="dropsize-section">
@@ -663,9 +663,13 @@ function renderDetail(eid, contestId) {
     const barDatasets = qualified.map((cid, idx) => {
       const cand = candidateById.get(cid);
       const color = qualifiedColors[idx];
-      const data = series.map(entry => {
-        const total = Object.values(entry.votes).reduce((s, v) => s + v, 0);
-        return total > 0 ? (entry.votes[cid] || 0) / total * 100 : 0;
+      const data = series.map((entry, i) => {
+        const prev = series[i - 1];
+        const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
+          return s + ((entry.votes[k] || 0) - (prev ? prev.votes[k] || 0 : 0));
+        }, 0);
+        const batchVotes = (entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0);
+        return batchTotal > 0 ? batchVotes / batchTotal * 100 : 0;
       });
       return {
         label: cand?.name || String(cid),
@@ -676,10 +680,15 @@ function renderDetail(eid, contestId) {
     });
 
     if (others.length > 0) {
-      const othersBarData = series.map(entry => {
-        const total = Object.values(entry.votes).reduce((s, v) => s + v, 0);
-        const othersVotes = others.reduce((s, cid) => s + (entry.votes[cid] || 0), 0);
-        return total > 0 ? othersVotes / total * 100 : 0;
+      const othersBarData = series.map((entry, i) => {
+        const prev = series[i - 1];
+        const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
+          return s + ((entry.votes[k] || 0) - (prev ? prev.votes[k] || 0 : 0));
+        }, 0);
+        const othersBatch = others.reduce((s, cid) => {
+          return s + ((entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0));
+        }, 0);
+        return batchTotal > 0 ? othersBatch / batchTotal * 100 : 0;
       });
       barDatasets.push({
         label: 'All Others',
@@ -710,7 +719,7 @@ function renderDetail(eid, contestId) {
             stacked: true,
             min: 0,
             max: 100,
-            title: { display: true, text: 'Cumulative Vote Share (%)', color: '#94a3b8' },
+            title: { display: true, text: 'Share of Drop Votes (%)', color: '#94a3b8' },
             ticks: { color: '#94a3b8' },
             grid: { color: '#1e293b' },
           },
@@ -719,7 +728,7 @@ function renderDetail(eid, contestId) {
     }));
   } else {
     document.getElementById('batch-section').innerHTML =
-      '<h3>Vote Share by Drop</h3><p class="status-msg">No drops yet.</p>';
+      '<h3>Batch Composition</h3><p class="status-msg">No drops yet.</p>';
   }
 
   // Votes per drop bar chart
