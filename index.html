@@ -656,19 +656,19 @@ function renderDetail(eid, contestId) {
     },
   }));
 
-  // Build bar chart — one bar per drop after the first (indices 1..n-1)
-  if (series.length >= 2) {
-    const barLabels = series.slice(1).map(entry => entry.ts);
+  // Build bar chart — one bar per drop (first drop diffs against zero)
+  if (series.length >= 1) {
+    const barLabels = series.map(entry => entry.ts);
 
     const barDatasets = qualified.map((cid, idx) => {
       const cand = candidateById.get(cid);
       const color = qualifiedColors[idx];
-      const data = series.slice(1).map((entry, i) => {
-        const prev = series[i];
+      const data = series.map((entry, i) => {
+        const prev = series[i - 1];
         const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
-          return s + ((entry.votes[k] || 0) - (prev.votes[k] || 0));
+          return s + ((entry.votes[k] || 0) - (prev ? prev.votes[k] || 0 : 0));
         }, 0);
-        const batchVotes = (entry.votes[cid] || 0) - (prev.votes[cid] || 0);
+        const batchVotes = (entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0);
         return batchTotal > 0 ? batchVotes / batchTotal * 100 : 0;
       });
       return {
@@ -680,13 +680,13 @@ function renderDetail(eid, contestId) {
     });
 
     if (others.length > 0) {
-      const othersBarData = series.slice(1).map((entry, i) => {
-        const prev = series[i];
+      const othersBarData = series.map((entry, i) => {
+        const prev = series[i - 1];
         const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
-          return s + ((entry.votes[k] || 0) - (prev.votes[k] || 0));
+          return s + ((entry.votes[k] || 0) - (prev ? prev.votes[k] || 0 : 0));
         }, 0);
         const othersBatch = others.reduce((s, cid) => {
-          return s + ((entry.votes[cid] || 0) - (prev.votes[cid] || 0));
+          return s + ((entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0));
         }, 0);
         return batchTotal > 0 ? othersBatch / batchTotal * 100 : 0;
       });
@@ -728,16 +728,16 @@ function renderDetail(eid, contestId) {
     }));
   } else {
     document.getElementById('batch-section').innerHTML =
-      '<h3>Batch Composition</h3><p class="status-msg">Not enough drops for batch analysis.</p>';
+      '<h3>Batch Composition</h3><p class="status-msg">No drops yet.</p>';
   }
 
   // Votes per drop bar chart
-  if (series.length >= 2) {
-    const dropLabels = series.slice(1).map(entry => entry.ts);
-    const dropData = series.slice(1).map((entry, i) => {
-      const prev = series[i];
+  if (series.length >= 1) {
+    const dropLabels = series.map(entry => entry.ts);
+    const dropData = series.map((entry, i) => {
+      const prev = series[i - 1];
       return Object.keys(entry.votes).reduce((s, cid) => {
-        return s + ((entry.votes[cid] || 0) - (prev.votes[cid] || 0));
+        return s + ((entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0));
       }, 0);
     });
     activeCharts.push(new Chart(document.getElementById('chart-dropsize'), {
@@ -766,7 +766,7 @@ function renderDetail(eid, contestId) {
     }));
   } else {
     document.getElementById('dropsize-section').innerHTML =
-      '<h3>Votes per Drop</h3><p class="status-msg">Not enough drops for analysis.</p>';
+      '<h3>Votes per Drop</h3><p class="status-msg">No drops yet.</p>';
   }
 
   // Build current totals pane — all candidates ranked by final votes
