@@ -157,15 +157,11 @@ function encodeFilename(f) {
 }
 
 function parseLabel(filename) {
-  const m = filename.match(/_(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/);
+  // Filenames use Pacific time — extract and reformat directly, no conversion.
+  const m = filename.match(/_(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
   if (!m) return filename;
-  const [, date, time] = m;
-  const dt = new Date(`${date}T${time}:00Z`);
-  return dt.toLocaleString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    month: 'numeric', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  });
+  const [, , month, day, hour, min] = m;
+  return `${+month}/${+day} ${hour}:${min}`;
 }
 
 // ─────────────────────────── Data loading ────────────────────────

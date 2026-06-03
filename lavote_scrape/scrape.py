@@ -137,8 +137,12 @@ def scrape(
                 ts = parse(data["TimeStamp"])
                 if last_timestamp is None or ts > last_timestamp:
                     last_timestamp = ts
+                    cand_rows = sorted(
+                        [r for r in data["Data"] if r.get("ReferenceType") == "CAND"],
+                        key=lambda r: r["ReferenceID"],
+                    )
                     last_data_hash = hashlib.md5(
-                        json.dumps(data["Data"], sort_keys=True).encode()
+                        json.dumps(cand_rows, sort_keys=True).encode()
                     ).hexdigest()
         except Exception:
             pass
@@ -173,9 +177,11 @@ def scrape(
         ).json()
         timestamp = parse(results["TimeStamp"])
 
-        data_hash = hashlib.md5(
-            json.dumps(results["Data"], sort_keys=True).encode()
-        ).hexdigest()
+        cand_rows = sorted(
+            [r for r in results["Data"] if r.get("ReferenceType") == "CAND"],
+            key=lambda r: r["ReferenceID"],
+        )
+        data_hash = hashlib.md5(json.dumps(cand_rows, sort_keys=True).encode()).hexdigest()
         if (not last_timestamp or timestamp > last_timestamp) and data_hash != last_data_hash:
             filename = FILE_NAME.format(
                 eid=eid, date=str(datetime.now(_PACIFIC).replace(tzinfo=None))
