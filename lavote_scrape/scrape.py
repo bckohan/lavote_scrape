@@ -207,6 +207,66 @@ def scrape(
         time.sleep(delay)
 
 
+@app.command()
+def turnout(
+    eid: t.Annotated[int, Argument(help="Election ID")],
+):
+    """For each drop, write a CSV ranking contests by % turnout change vs the previous drop."""
+    import csv
+
+    election_file = f"election_{eid}.json"
+    if not Path(election_file).exists():
+        print(f"Election metadata not found: {election_file}")
+        raise SystemExit(1)
+
+    meta = json.loads(Path(election_file).read_text())
+    contest_titles: dict[int, str] = {}
+    cand_to_contest: dict[int, int] = {}
+    for group in meta["Data"]["ContestGroups"]:
+        for contest in group["Contests"]:
+            contest_titles[contest["ID"]] = contest["Title"]
+            for cand in contest.get("Candidates", []):
+                cand_to_contest[cand["ID"]] = contest["ID"]
+
+    result_files = sorted(glob(f"{eid}_*.json"))
+    if len(result_files) < 2:
+        print("Need at least 2 drops to compute turnout change.")
+        return
+
+    def contest_votes(path: str) -> dict[int, float]:
+        data = json.loads(Path(path).read_text())
+        totals: dict[int, float] = {}
+        for row in data["Data"]:
+            if row["ReferenceType"] == "CAND":
+                cid = cand_to_contest.get(row["ReferenceID"])
+                if cid is not None:
+                    totals[cid] = totals.get(cid, 0.0) + row["Value"]
+        return totals
+
+    prev_votes = contest_votes(result_files[0])
+    for path in result_files[1:]:
+        curr_votes = contest_votes(path)
+
+        rows = []
+        for cid, title in contest_titles.items():
+            prev = prev_votes.get(cid, 0.0)
+            new_votes = curr_votes.get(cid, 0.0) - prev
+            if prev > 0 and new_votes > 0:
+                rows.append((title, new_votes / prev * 100))
+
+        rows.sort(key=lambda r: -r[1])
+
+        out = path.replace(".json", "_turnout.csv")
+        with open(out, "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["Contest", "% Turnout Change"])
+            for title, pct in rows:
+                w.writerow([title, f"{pct:.2f}%"])
+        print(f"Wrote {out}")
+
+        prev_votes = curr_votes
+
+
 def main():
     app()
 
