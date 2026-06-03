@@ -3,6 +3,7 @@ import typing as t
 import requests
 import subprocess
 import time
+import hashlib
 from glob import glob
 from dateutil.parser import parse
 import json
@@ -125,12 +126,17 @@ def scrape(
 ):
     started = time.monotonic()
     last_timestamp = None
-    for f in glob(f"{eid}_*.json"):
+    last_data_hash = None
+    for f in sorted(glob(f"{eid}_*.json")):
         try:
             with open(f) as fh:
-                ts = parse(json.load(fh)["TimeStamp"])
+                data = json.load(fh)
+                ts = parse(data["TimeStamp"])
                 if last_timestamp is None or ts > last_timestamp:
                     last_timestamp = ts
+                    last_data_hash = hashlib.md5(
+                        json.dumps(data["Contests"], sort_keys=True).encode()
+                    ).hexdigest()
         except Exception:
             pass
 
@@ -164,17 +170,23 @@ def scrape(
         ).json()
         timestamp = parse(results["TimeStamp"])
 
-        if not last_timestamp or timestamp > last_timestamp:
+        data_hash = hashlib.md5(
+            json.dumps(results["Contests"], sort_keys=True).encode()
+        ).hexdigest()
+        if (not last_timestamp or timestamp > last_timestamp) and data_hash != last_data_hash:
             filename = FILE_NAME.format(eid=eid, date=str(datetime.now()))
             with open(filename, "w") as f:
                 json.dump(results, f)
             update_index(eid, result_file=filename)
             last_timestamp = timestamp  # track API timestamp, not wall clock
+            last_data_hash = data_hash
             if moo:
                 play_moo()
             print(f"New Results {filename}")
             if commit:
                 git_commit(filename)
+        elif (not last_timestamp or timestamp > last_timestamp) and data_hash == last_data_hash:
+            print(f"Timestamp advanced to {timestamp} but vote data unchanged — skipping.")
 
         if max_runtime and time.monotonic() - started >= max_runtime:
             print(f"Reached max runtime of {max_runtime}s, exiting.")
