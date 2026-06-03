@@ -53,6 +53,18 @@
     .chart-section h3 { margin: 0 0 0.5rem; color: #e2e8f0; font-size: 1rem; }
     .chart-section .annotation { font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem; }
     .chart-wrap { position: relative; height: 300px; }
+    .totals-list { list-style: none; margin: 0; padding: 0; font-size: 0.88rem; }
+    .totals-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid #1e2d3d; }
+    .totals-row:last-child { border-bottom: none; }
+    .totals-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .totals-name { flex: 1; color: #e2e8f0; }
+    .totals-votes { color: #94a3b8; min-width: 5.5rem; text-align: right; }
+    .totals-pct { color: #e2e8f0; font-weight: 600; min-width: 4rem; text-align: right; }
+    .totals-total-row { display: flex; justify-content: space-between; margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid #334155; font-size: 0.88rem; color: #94a3b8; }
+    .totals-total-row strong { color: #e2e8f0; }
+    .totals-row.winner { background: #14532d33; border-radius: 4px; border-left: 3px solid #4ade80; padding-left: calc(0.6rem - 3px); }
+    .totals-row.winner .totals-name { color: #4ade80; font-weight: 600; }
+    .totals-row.winner .totals-pct { color: #4ade80; }
     @media (max-width: 480px) { .chart-wrap { height: 220px; } .detail-title h2 { font-size: 1.1rem; } #detail-view { padding-left: 0; padding-right: 0; } }
 
     @media (min-width: 600px) {
@@ -95,21 +107,20 @@
 <script>
 // ─────────────────────────── Constants ───────────────────────────
 
-const PARTY_COLORS = {
-  'Democratic':            '#3b82f6',
-  'Republican':            '#ef4444',
-  'Green':                 '#22c55e',
-  'Libertarian':           '#eab308',
-  'Peace and Freedom':     '#a855f7',
-  'American Independent':  '#f97316',
-  'Non Partisan':          '#94a3b8',
-};
-const FALLBACK_COLORS = ['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb923c','#4ade80','#e879f9'];
+// Colors assigned by rank (index 0 = top vote getter). Party affiliation is not used.
+const RANKED_COLORS = [
+  '#4ade80', // 1st  green
+  '#f97316', // 2nd  orange
+  '#60a5fa', // 3rd  blue
+  '#f472b6', // 4th  pink
+  '#facc15', // 5th  yellow
+  '#a78bfa', // 6th  violet
+  '#2dd4bf', // 7th  teal
+  '#fb7185', // 8th  rose
+  '#818cf8', // 9th  indigo
+  '#86efac', // 10th mint
+];
 const OTHERS_COLOR = '#6b7280';
-
-function candidateColor(party, index) {
-  return PARTY_COLORS[party] || FALLBACK_COLORS[index % FALLBACK_COLORS.length];
-}
 
 // ─────────────────────────── State ───────────────────────────────
 
@@ -159,10 +170,17 @@ function buildLookups(meta) {
         candidateById.set(c.ID, { name: c.Name, party: c.Party || '' });
         candidateIds.push(c.ID);
       }
+      const voteForText = contest.VoteFor || '';
+      const voteForMatch = voteForText.match(/\b(one|two|three|four|five|six|seven|eight|nine|\d+)\b/i);
+      const wordToNum = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9 };
+      const seats = voteForMatch
+        ? (parseInt(voteForMatch[1]) || wordToNum[voteForMatch[1].toLowerCase()] || 1)
+        : 1;
       contestById.set(contest.ID, {
         title: contest.Title,
         groupName: group.Name,
         candidateIds,
+        seats,
       });
       contestIds.push(contest.ID);
     }
@@ -258,7 +276,11 @@ async function init() {
     sel.addEventListener('change', async () => {
       state.currentEid = sel.value;
       if (!state.elections[state.currentEid]) await loadElection(state.currentEid);
-      location.hash = '#/';
+      if (location.hash !== '#/') {
+        location.hash = '#/';
+      } else {
+        renderIndex();
+      }
     });
 
     document.getElementById('search-input').addEventListener('input', e => {
@@ -284,7 +306,7 @@ function getLeader(contestId, electionData) {
   const { candidateById, contestById, series } = electionData;
   const contest = contestById.get(contestId);
   const points = series.get(contestId);
-  if (!points || points.length === 0) return { name: '—', pct: 0, sparkData: [], party: '' };
+  if (!points || points.length === 0) return { name: '—', pct: 0, sparkData: [] };
 
   const lastVotes = points[points.length - 1].votes;
   const total = Object.values(lastVotes).reduce((s, v) => s + v, 0);
@@ -305,7 +327,7 @@ function getLeader(contestId, electionData) {
       return t > 0 ? (p.votes[topId] ?? 0) / t * 100 : 0;
     });
 
-  return { name: cand?.name ?? '—', pct, sparkData, party: cand?.party ?? '' };
+  return { name: cand?.name ?? '—', pct, sparkData };
 }
 
 let sparklineCharts = [];
@@ -337,11 +359,16 @@ function getQualifying(contestId, electionData) {
 
   for (const cid of contest.candidateIds) {
     const v = finalVotes[cid] || 0;
-    if (v / contestTotal >= 0.05) {
+    if (v / contestTotal >= 0.03) {
       qualified.push(cid);
     } else {
       others.push(cid);
     }
+  }
+
+  // If only one candidate is below threshold, show them individually
+  if (others.length === 1) {
+    qualified.push(others.pop());
   }
 
   // Sort qualified descending by final votes
@@ -352,12 +379,12 @@ function getQualifying(contestId, electionData) {
   return { qualified, others, contestTotal, series: seriesData, finalVotes };
 }
 
-function drawSparkline(canvas, data, party) {
+function drawSparkline(canvas, data) {
   sparklineCharts.push(new Chart(canvas, {
     type: 'line',
     data: {
       labels: data.map((_, i) => i),
-      datasets: [{ data, borderColor: candidateColor(party, 0), borderWidth: 1.5,
+      datasets: [{ data, borderColor: RANKED_COLORS[0], borderWidth: 1.5,
                    pointRadius: 0, tension: 0.3, fill: false }],
     },
     options: {
@@ -392,7 +419,7 @@ function renderIndex() {
 
     for (const contestId of group.contestIds) {
       const contest = el.contestById.get(contestId);
-      const { name, pct, sparkData, party } = getLeader(contestId, el);
+      const { name, pct, sparkData } = getLeader(contestId, el);
 
       const row = document.createElement('div');
       row.className = 'contest-row';
@@ -417,7 +444,7 @@ function renderIndex() {
       if (sparkData.length > 1) {
         requestAnimationFrame(() => {
           const canvas = row.querySelector('.sparkline-canvas');
-          drawSparkline(canvas, sparkData, party);
+          drawSparkline(canvas, sparkData);
         });
       }
     }
@@ -471,14 +498,21 @@ function renderDetail(eid, contestId) {
   document.getElementById('detail-body').innerHTML = `
     <div id="detail-view">
       <div class="charts-container">
+        <div class="chart-section" id="totals-section">
+          <h3>Current Totals</h3>
+        </div>
         <div class="chart-section">
           <h3>Cumulative Vote Share</h3>
           <div class="annotation" id="annotation-text"></div>
           <div class="chart-wrap"><canvas id="chart-line"></canvas></div>
         </div>
-        <div class="chart-section">
+        <div class="chart-section" id="batch-section">
           <h3>Batch Composition</h3>
           <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
+        </div>
+        <div class="chart-section" id="dropsize-section">
+          <h3>Votes per Drop</h3>
+          <div class="chart-wrap"><canvas id="chart-dropsize"></canvas></div>
         </div>
       </div>
     </div>
@@ -487,10 +521,13 @@ function renderDetail(eid, contestId) {
   // X-axis labels: use ts field from series entries
   const lineLabels = series.map(entry => entry.ts);
 
+  // Colors by rank: qualified is already sorted descending by final votes
+  const qualifiedColors = qualified.map((_, idx) => RANKED_COLORS[idx % RANKED_COLORS.length]);
+
   // Build line chart datasets
   const lineDatasets = qualified.map((cid, idx) => {
     const cand = candidateById.get(cid);
-    const color = PARTY_COLORS[cand?.party] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+    const color = qualifiedColors[idx];
     const data = series.map(entry => {
       const runningTotal = Object.values(entry.votes).reduce((s, v) => s + v, 0);
       return runningTotal > 0 ? (entry.votes[cid] || 0) / runningTotal * 100 : 0;
@@ -532,9 +569,9 @@ function renderDetail(eid, contestId) {
   const X = others.length;
   const annotationEl = document.getElementById('annotation-text');
   if (X === 0) {
-    annotationEl.textContent = `Showing ${N} of ${M} candidates (≥5% final share).`;
+    annotationEl.textContent = `Showing ${N} of ${M} candidates (≥3% final share).`;
   } else {
-    annotationEl.textContent = `Showing ${N} of ${M} candidates (≥5% final share). ${X} candidate${X !== 1 ? 's' : ''} aggregated into "All Others".`;
+    annotationEl.textContent = `Showing ${N} of ${M} candidates (≥3% final share). ${X} candidates aggregated into "All Others".`;
   }
 
   // Render line chart
@@ -568,7 +605,7 @@ function renderDetail(eid, contestId) {
 
     const barDatasets = qualified.map((cid, idx) => {
       const cand = candidateById.get(cid);
-      const color = PARTY_COLORS[cand?.party] || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
+      const color = qualifiedColors[idx];
       const data = series.slice(1).map((entry, i) => {
         const prev = series[i];
         const batchTotal = Object.keys(entry.votes).reduce((s, k) => {
@@ -633,9 +670,79 @@ function renderDetail(eid, contestId) {
       },
     }));
   } else {
-    document.querySelector('#detail-view .chart-section:last-child').innerHTML =
+    document.getElementById('batch-section').innerHTML =
       '<h3>Batch Composition</h3><p class="status-msg">Not enough drops for batch analysis.</p>';
   }
+
+  // Votes per drop bar chart
+  if (series.length >= 2) {
+    const dropLabels = series.slice(1).map(entry => entry.ts);
+    const dropData = series.slice(1).map((entry, i) => {
+      const prev = series[i];
+      return Object.keys(entry.votes).reduce((s, cid) => {
+        return s + ((entry.votes[cid] || 0) - (prev.votes[cid] || 0));
+      }, 0);
+    });
+    activeCharts.push(new Chart(document.getElementById('chart-dropsize'), {
+      type: 'bar',
+      data: {
+        labels: dropLabels,
+        datasets: [{
+          label: 'New votes',
+          data: dropData,
+          backgroundColor: RANKED_COLORS[2],
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
+          y: {
+            title: { display: true, text: 'New votes', color: '#94a3b8' },
+            ticks: { color: '#94a3b8', callback: v => v.toLocaleString() },
+            grid: { color: '#1e293b' },
+          },
+        },
+      },
+    }));
+  } else {
+    document.getElementById('dropsize-section').innerHTML =
+      '<h3>Votes per Drop</h3><p class="status-msg">Not enough drops for analysis.</p>';
+  }
+
+  // Build current totals pane — all candidates ranked by final votes
+  const { finalVotes, contestTotal } = qualifying;
+  const allRanked = [...contest.candidateIds]
+    .sort((a, b) => (finalVotes[b] || 0) - (finalVotes[a] || 0));
+
+  const ul = document.createElement('ul');
+  ul.className = 'totals-list';
+  allRanked.forEach((cid, rank) => {
+    const cand = candidateById.get(cid);
+    const votes = finalVotes[cid] || 0;
+    const pct = contestTotal > 0 ? (votes / contestTotal * 100).toFixed(1) : '0.0';
+    const color = qualified.includes(cid)
+      ? qualifiedColors[qualified.indexOf(cid)]
+      : OTHERS_COLOR;
+    const li = document.createElement('li');
+    li.className = 'totals-row' + (rank < contest.seats ? ' winner' : '');
+    li.innerHTML = `
+      <span class="totals-swatch" style="background:${color}"></span>
+      <span class="totals-name">${escHtml(cand?.name || String(cid))}</span>
+      <span class="totals-votes">${votes.toLocaleString()}</span>
+      <span class="totals-pct">${pct}%</span>
+    `;
+    ul.appendChild(li);
+  });
+
+  const totalsSection = document.getElementById('totals-section');
+  totalsSection.appendChild(ul);
+  const totalRow = document.createElement('div');
+  totalRow.className = 'totals-total-row';
+  totalRow.innerHTML = `<span>Total votes</span><strong>${contestTotal.toLocaleString()}</strong>`;
+  totalsSection.appendChild(totalRow);
 }
 
 function filterContests(query) {
