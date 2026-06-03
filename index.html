@@ -13,6 +13,8 @@
     .site-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #0a0a14; border-bottom: 1px solid #1e1e30; flex-wrap: wrap; }
     .site-header h1 { font-size: 1rem; font-weight: 600; flex: 1; white-space: nowrap; }
     #election-select { background: #1a1a2e; color: #e2e8f0; border: 1px solid #2a2a40; border-radius: 6px; padding: 5px 10px; font-size: 0.85rem; cursor: pointer; }
+    .repo-link { font-size: 0.78rem; color: #60a5fa; text-decoration: none; white-space: nowrap; }
+    .repo-link:hover { text-decoration: underline; }
 
     /* ── Search ── */
     .search-wrap { padding: 10px 16px; border-bottom: 1px solid #1a1a2e; }
@@ -107,6 +109,7 @@
 <div id="screen-index">
   <header class="site-header">
     <h1>LA County Election Results</h1>
+    <a class="repo-link" href="https://github.com/bckohan/lavote_scrape" target="_blank" rel="noopener">Raw Data</a>
     <select id="election-select"></select>
   </header>
   <div class="search-wrap">
