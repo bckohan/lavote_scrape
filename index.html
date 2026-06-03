@@ -31,6 +31,7 @@
     .contest-leader { display: block; font-size: 0.72rem; color: #64748b; margin-top: 2px; }
     .match-note { display: block; font-size: 0.68rem; color: #3b82f6; margin-top: 2px; font-style: italic; }
     .sparkline-canvas { flex-shrink: 0; display: block; }
+    .badge-party { display: inline-block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; border-radius: 3px; padding: 1px 4px; margin-left: 5px; vertical-align: middle; white-space: nowrap; }
 
     /* ── Detail screen ── */
     .detail-header { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: #0a0a14; border-bottom: 1px solid #1e1e30; flex-wrap: wrap; }
@@ -50,7 +51,12 @@
     /* ── Detail view ── */
     #detail-view { max-width: 900px; margin: 0 auto; padding: 1rem; }
     .charts-container { display: flex; flex-direction: column; gap: 2rem; }
-    .chart-section h3 { margin: 0 0 0.5rem; color: #e2e8f0; font-size: 1rem; }
+    .chart-section h3 { margin: 0; color: #e2e8f0; font-size: 1rem; }
+    .chart-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+    .toggle-group { display: flex; border: 1px solid #2a2a40; border-radius: 6px; overflow: hidden; }
+    .toggle-btn { background: none; border: none; color: #64748b; padding: 3px 10px; font-size: 0.75rem; cursor: pointer; }
+    .toggle-btn.active { background: #1e293b; color: #e2e8f0; font-weight: 600; }
+    .toggle-btn:hover:not(.active) { background: #15152a; }
     .chart-section .annotation { font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem; }
     .chart-wrap { position: relative; height: 300px; }
     .totals-list { list-style: none; margin: 0; padding: 0; font-size: 0.88rem; }
@@ -136,6 +142,21 @@ const RANKED_COLORS = [
   '#86efac', // 10th mint
 ];
 const OTHERS_COLOR = '#6b7280';
+
+const PARTY_STYLES = {
+  'Democratic':          { label: 'DEM', bg: '#1d4ed8', color: '#fff' },
+  'Republican':          { label: 'REP', bg: '#b91c1c', color: '#fff' },
+  'Green':               { label: 'GRN', bg: '#15803d', color: '#fff' },
+  'Libertarian':         { label: 'LIB', bg: '#a16207', color: '#fff' },
+  'Peace and Freedom':   { label: 'P&F', bg: '#9f1239', color: '#fff' },
+  'American Independent':{ label: 'AIP', bg: '#7c3aed', color: '#fff' },
+};
+
+function partyBadge(party) {
+  const s = PARTY_STYLES[party];
+  if (!s) return '';
+  return `<span class="badge-party" style="background:${s.bg};color:${s.color}">${s.label}</span>`;
+}
 
 // ─────────────────────────── State ───────────────────────────────
 
@@ -552,7 +573,13 @@ function renderDetail(eid, contestId) {
           <h3>Current Totals</h3>
         </div>
         <div class="chart-section">
-          <h3>Cumulative Vote Share</h3>
+          <div class="chart-section-header">
+            <h3>Cumulative Vote Share</h3>
+            <div class="toggle-group" id="line-mode-toggle">
+              <button class="toggle-btn" data-mode="pct">%</button>
+              <button class="toggle-btn active" data-mode="votes">Votes</button>
+            </div>
+          </div>
           <div class="annotation" id="annotation-text"></div>
           <div class="chart-wrap"><canvas id="chart-line"></canvas></div>
         </div>
@@ -581,17 +608,20 @@ function renderDetail(eid, contestId) {
   // Colors by rank: qualified is already sorted descending by final votes
   const qualifiedColors = qualified.map((_, idx) => RANKED_COLORS[idx % RANKED_COLORS.length]);
 
-  // Build line chart datasets
+  // Build line chart datasets — both % and absolute votes variants
   const lineDatasets = qualified.map((cid, idx) => {
     const cand = candidateById.get(cid);
     const color = qualifiedColors[idx];
-    const data = series.map(entry => {
-      const runningTotal = Object.values(entry.votes).reduce((s, v) => s + v, 0);
-      return runningTotal > 0 ? (entry.votes[cid] || 0) / runningTotal * 100 : 0;
+    const pctData = series.map(entry => {
+      const total = Object.values(entry.votes).reduce((s, v) => s + v, 0);
+      return total > 0 ? (entry.votes[cid] || 0) / total * 100 : 0;
     });
+    const votesData = series.map(entry => entry.votes[cid] || 0);
     return {
       label: cand?.name || String(cid),
-      data,
+      data: votesData,
+      _pctData: pctData,
+      _votesData: votesData,
       borderColor: color,
       backgroundColor: color,
       fill: false,
@@ -602,14 +632,19 @@ function renderDetail(eid, contestId) {
   });
 
   if (others.length > 0) {
-    const othersData = series.map(entry => {
-      const runningTotal = Object.values(entry.votes).reduce((s, v) => s + v, 0);
+    const pctData = series.map(entry => {
+      const total = Object.values(entry.votes).reduce((s, v) => s + v, 0);
       const othersVotes = others.reduce((s, cid) => s + (entry.votes[cid] || 0), 0);
-      return runningTotal > 0 ? othersVotes / runningTotal * 100 : 0;
+      return total > 0 ? othersVotes / total * 100 : 0;
     });
+    const votesData = series.map(entry =>
+      others.reduce((s, cid) => s + (entry.votes[cid] || 0), 0)
+    );
     lineDatasets.push({
       label: 'All Others',
-      data: othersData,
+      data: votesData,
+      _pctData: pctData,
+      _votesData: votesData,
       borderColor: OTHERS_COLOR,
       backgroundColor: OTHERS_COLOR,
       fill: false,
@@ -633,7 +668,7 @@ function renderDetail(eid, contestId) {
 
   // Render line chart
   const lineCanvas = document.getElementById('chart-line');
-  activeCharts.push(new Chart(lineCanvas, {
+  const lineChart = new Chart(lineCanvas, {
     type: 'line',
     data: { labels: lineLabels, datasets: lineDatasets },
     options: {
@@ -641,20 +676,57 @@ function renderDetail(eid, contestId) {
       maintainAspectRatio: false,
       plugins: {
         legend: { position: 'top', labels: { boxWidth: 12, color: '#e2e8f0' } },
-        tooltip: { mode: 'index', intersect: false },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              return ` ${ctx.dataset.label}: ${lineChart._mode === 'votes' ? v.toLocaleString() : v.toFixed(1) + '%'}`;
+            },
+          },
+        },
       },
       scales: {
         x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
         y: {
-          min: 0,
-          max: 100,
-          title: { display: true, text: 'Vote Share (%)', color: '#94a3b8' },
-          ticks: { color: '#94a3b8' },
+          title: { display: true, text: 'Accumulated Votes', color: '#94a3b8' },
+          ticks: { color: '#94a3b8', callback: v => v.toLocaleString() },
           grid: { color: '#1e293b' },
         },
       },
     },
-  }));
+  });
+  lineChart._mode = 'votes';
+  activeCharts.push(lineChart);
+
+  document.getElementById('line-mode-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('.toggle-btn');
+    if (!btn) return;
+    const mode = btn.dataset.mode;
+    if (mode === lineChart._mode) return;
+    lineChart._mode = mode;
+    document.querySelectorAll('#line-mode-toggle .toggle-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode)
+    );
+    const isPct = mode === 'pct';
+    lineChart.data.datasets.forEach(ds => {
+      ds.data = isPct ? ds._pctData : ds._votesData;
+    });
+    const yScale = lineChart.options.scales.y;
+    if (isPct) {
+      yScale.min = 0;
+      yScale.max = 100;
+      yScale.title.text = 'Vote Share (%)';
+      yScale.ticks.callback = undefined;
+    } else {
+      delete yScale.min;
+      delete yScale.max;
+      yScale.title.text = 'Accumulated Votes';
+      yScale.ticks.callback = v => v.toLocaleString();
+    }
+    lineChart.update();
+  });
 
   // Build bar chart — cumulative vote share at each drop (100% stacked)
   if (series.length >= 1) {
@@ -787,7 +859,7 @@ function renderDetail(eid, contestId) {
     li.className = 'totals-row' + (rank < contest.seats ? ' winner' : '');
     li.innerHTML = `
       <span class="totals-swatch" style="background:${color}"></span>
-      <span class="totals-name">${escHtml(cand?.name || String(cid))}</span>
+      <span class="totals-name">${escHtml(cand?.name || String(cid))}${partyBadge(cand?.party)}</span>
       <span class="totals-votes">${votes.toLocaleString()}</span>
       <span class="totals-pct">${pct}%</span>
     `;
