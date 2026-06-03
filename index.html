@@ -32,6 +32,8 @@
     .match-note { display: block; font-size: 0.68rem; color: #3b82f6; margin-top: 2px; font-style: italic; }
     .sparkline-canvas { flex-shrink: 0; display: block; }
     .badge-party { display: inline-block; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; border-radius: 3px; padding: 1px 4px; margin-left: 5px; vertical-align: middle; white-space: nowrap; }
+    .measure-pass-rate { font-size: 0.78rem; font-weight: 600; color: #60a5fa; margin-bottom: 0.6rem; }
+    .measure-text { font-size: 0.82rem; color: #94a3b8; line-height: 1.55; }
 
     /* ── Detail screen ── */
     .detail-header { display: flex; align-items: center; gap: 10px; padding: 11px 16px; background: #0a0a14; border-bottom: 1px solid #1e1e30; flex-wrap: wrap; }
@@ -152,6 +154,20 @@ const PARTY_STYLES = {
   'American Independent':{ label: 'AIP', bg: '#7c3aed', color: '#fff' },
 };
 
+function measurePassThreshold(passRate) {
+  // Returns {value (0-100), strict} for YES win detection.
+  if (!passRate) return { value: 50, strict: true };
+  const m = passRate.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (m) return { value: parseFloat(m[1]), strict: false };
+  if (passRate.includes('2/3')) return { value: 200 / 3, strict: false };
+  return { value: 50, strict: true }; // majority
+}
+
+function yesWins(yesPct, passRate) {
+  const { value, strict } = measurePassThreshold(passRate);
+  return strict ? yesPct > value : yesPct >= value;
+}
+
 function partyBadge(party) {
   const s = PARTY_STYLES[party];
   if (!s) return '';
@@ -217,6 +233,9 @@ function buildLookups(meta) {
         groupName: group.Name,
         candidateIds,
         seats,
+        type: contest.Type,
+        measureText: contest.MeasureText || '',
+        measurePassRate: contest.MeasurePassRate || '',
       });
       contestIds.push(contest.ID);
     }
@@ -572,6 +591,12 @@ function renderDetail(eid, contestId) {
         <div class="chart-section" id="totals-section">
           <h3>Current Totals</h3>
         </div>
+        ${contest.type === 'Measure' && contest.measureText ? `
+        <div class="chart-section" id="measure-info-section">
+          <h3>Measure Text</h3>
+          <p class="measure-pass-rate">To pass: ${escHtml(contest.measurePassRate || 'Majority of votes cast')}</p>
+          <p class="measure-text">${escHtml(contest.measureText)}</p>
+        </div>` : ''}
         <div class="chart-section">
           <div class="chart-section-header">
             <h3>Cumulative Vote Share</h3>
@@ -846,6 +871,13 @@ function renderDetail(eid, contestId) {
   const allRanked = [...contest.candidateIds]
     .sort((a, b) => (finalVotes[b] || 0) - (finalVotes[a] || 0));
 
+  const yesCid = contest.type === 'Measure'
+    ? contest.candidateIds.find(cid => candidateById.get(cid)?.name === 'YES')
+    : null;
+  const yesPct = yesCid && contestTotal > 0
+    ? (finalVotes[yesCid] || 0) / contestTotal * 100 : 0;
+  const measureYesPasses = yesCid ? yesWins(yesPct, contest.measurePassRate) : false;
+
   const ul = document.createElement('ul');
   ul.className = 'totals-list';
   allRanked.forEach((cid, rank) => {
@@ -855,8 +887,11 @@ function renderDetail(eid, contestId) {
     const color = qualified.includes(cid)
       ? qualifiedColors[qualified.indexOf(cid)]
       : OTHERS_COLOR;
+    const isWinner = contest.type === 'Measure'
+      ? (cand?.name === 'YES' ? measureYesPasses : !measureYesPasses)
+      : rank < contest.seats;
     const li = document.createElement('li');
-    li.className = 'totals-row' + (rank < contest.seats ? ' winner' : '');
+    li.className = 'totals-row' + (isWinner ? ' winner' : '');
     li.innerHTML = `
       <span class="totals-swatch" style="background:${color}"></span>
       <span class="totals-name">${escHtml(cand?.name || String(cid))}${partyBadge(cand?.party)}</span>
@@ -905,15 +940,18 @@ function renderDetail(eid, contestId) {
   allRanked.forEach((cid, rank) => {
     const cand = candidateById.get(cid);
     const tr = tbody.insertRow();
+    const isWinnerCell = contest.type === 'Measure'
+      ? (cand?.name === 'YES' ? measureYesPasses : !measureYesPasses)
+      : rank < contest.seats;
     const nameCell = tr.insertCell();
     nameCell.textContent = cand?.name || String(cid);
-    if (rank < contest.seats) nameCell.classList.add('winner-cell');
+    if (isWinnerCell) nameCell.classList.add('winner-cell');
     dropBatch.forEach(drop => {
       const v = drop.byCandidate[cid] || 0;
       const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(1) : '0.0';
       const td = tr.insertCell();
       td.textContent = `${v.toLocaleString()} (${pct}%)`;
-      if (rank < contest.seats) td.classList.add('winner-cell');
+      if (isWinnerCell) td.classList.add('winner-cell');
     });
   });
 
