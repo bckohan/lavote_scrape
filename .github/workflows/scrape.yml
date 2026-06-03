@@ -29,9 +29,10 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    # Backstop in case an hourly trigger is delayed; the scraper also
-    # self-exits via --max-runtime below.
-    timeout-minutes: 75
+    # Hard backstop against hangs. Cancellation via concurrency is the real
+    # mechanism; the scraper runs indefinitely until the next hourly run
+    # cancels it.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -47,11 +48,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Scrape and commit
-        # Self-exit after ~65 min so the job ends cleanly before the next
-        # hourly run takes over (and well under the 75 min job timeout).
         run: >
           uv run scrape scrape ${{ github.event.inputs.eid || '4338' }}
           --delay ${{ github.event.inputs.delay || '60' }}
           --no-moo
           --commit
-          --max-runtime 3900
