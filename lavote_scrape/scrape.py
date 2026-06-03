@@ -9,6 +9,9 @@ from dateutil.parser import parse
 import json
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
 
 
 app = Typer()
@@ -135,7 +138,7 @@ def scrape(
                 if last_timestamp is None or ts > last_timestamp:
                     last_timestamp = ts
                     last_data_hash = hashlib.md5(
-                        json.dumps(data["Contests"], sort_keys=True).encode()
+                        json.dumps(data["Data"], sort_keys=True).encode()
                     ).hexdigest()
         except Exception:
             pass
@@ -171,10 +174,12 @@ def scrape(
         timestamp = parse(results["TimeStamp"])
 
         data_hash = hashlib.md5(
-            json.dumps(results["Contests"], sort_keys=True).encode()
+            json.dumps(results["Data"], sort_keys=True).encode()
         ).hexdigest()
         if (not last_timestamp or timestamp > last_timestamp) and data_hash != last_data_hash:
-            filename = FILE_NAME.format(eid=eid, date=str(datetime.now()))
+            filename = FILE_NAME.format(
+                eid=eid, date=str(datetime.now(_PACIFIC).replace(tzinfo=None))
+            )
             with open(filename, "w") as f:
                 json.dump(results, f)
             update_index(eid, result_file=filename)
