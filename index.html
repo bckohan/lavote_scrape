@@ -77,6 +77,8 @@
     .drop-table td:first-child, .drop-table th:first-child { text-align: left; position: sticky; left: 0; background: #0f172a; z-index: 1; min-width: 9rem; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
     .drop-table tr:last-child td { border-bottom: none; font-weight: 600; color: #94a3b8; border-top: 1px solid #334155; }
     .drop-table .winner-cell { color: #4ade80; }
+    #update-toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: #14532d; color: #4ade80; padding: 0.4rem 1rem; border-radius: 20px; font-size: 0.8rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; }
+    #update-toast.visible { opacity: 1; }
     @media (max-width: 480px) { .chart-wrap { height: 220px; } .detail-title h2 { font-size: 1.1rem; } #detail-view { padding-left: 0; padding-right: 0; } }
 
     @media (min-width: 600px) {
@@ -91,6 +93,7 @@
   </style>
 </head>
 <body>
+<div id="update-toast">New results</div>
 
 <!-- Index screen -->
 <div id="screen-index">
@@ -305,11 +308,46 @@ async function init() {
 
     window.addEventListener('hashchange', route);
     await route();
+    startPolling();
   } catch (err) {
     document.getElementById('contest-list').innerHTML =
       `<p class="status-msg">Error loading data: ${err.message}</p>`;
     console.error(err);
   }
+}
+
+function showToast() {
+  const toast = document.getElementById('update-toast');
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 3000);
+}
+
+async function startPolling() {
+  const INTERVAL = 60_000;
+  const poll = async () => {
+    try {
+      const fresh = await fetch('index.json', { cache: 'no-store' }).then(r => r.json());
+      let updated = false;
+      for (const eid of Object.keys(fresh)) {
+        const known = state.index?.[eid];
+        const freshCount = fresh[eid].result_files.length;
+        const knownCount = known?.result_files.length ?? 0;
+        if (freshCount > knownCount) {
+          updated = true;
+          state.index[eid] = fresh[eid];
+          delete state.elections[eid]; // evict cache so loadElection re-fetches
+        }
+      }
+      if (updated) {
+        await route();
+        showToast();
+      }
+    } catch (e) {
+      // network blip — try again next interval
+    }
+    setTimeout(poll, INTERVAL);
+  };
+  setTimeout(poll, INTERVAL);
 }
 
 // ─────────────────────────── Helpers ─────────────────────────────
