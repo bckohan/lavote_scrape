@@ -71,6 +71,27 @@ def backfill_index(eid: int):
         update_index(eid, result_file=f)
 
 
+NTFY_TOPIC = "lavote-results"
+VIEWER_URL = "https://bckohan.github.io/lavote_scrape/"
+
+
+def notify(filename: str):
+    """Send a push notification via ntfy.sh. Never raises."""
+    try:
+        requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=filename.encode(),
+            headers={
+                "Title": "LA Vote: new results",
+                "Click": VIEWER_URL,
+                "Tags": "ballot_box",
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        print(f"ntfy notification failed (non-fatal): {e}")
+
+
 def git_commit(filename: str):
     """Stage, commit and push a results file together with the updated index."""
     try:
@@ -80,6 +101,7 @@ def git_commit(filename: str):
         )
         subprocess.run(["git", "push"], check=True)
         print(f"Committed {filename}")
+        notify(filename)
     except subprocess.CalledProcessError as e:
         print(f"git commit/push failed: {e}")
 
