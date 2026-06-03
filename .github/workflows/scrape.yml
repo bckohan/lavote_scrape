@@ -50,7 +50,7 @@ jobs:
         # Self-exit after ~65 min so the job ends cleanly before the next
         # hourly run takes over (and well under the 75 min job timeout).
         run: >
-          uv run scrape ${{ github.event.inputs.eid || '4338' }}
+          uv run scrape scrape ${{ github.event.inputs.eid || '4338' }}
           --delay ${{ github.event.inputs.delay || '60' }}
           --no-moo
           --commit
