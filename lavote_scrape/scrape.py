@@ -125,10 +125,14 @@ def scrape(
 ):
     started = time.monotonic()
     last_timestamp = None
-    result_files = glob(f"{eid}_*.json")
-    if result_files:
-        last_file = sorted(result_files)[-1]
-        last_timestamp = parse(last_file.split("_")[1].split(".")[0])
+    for f in glob(f"{eid}_*.json"):
+        try:
+            with open(f) as fh:
+                ts = parse(json.load(fh)["TimeStamp"])
+                if last_timestamp is None or ts > last_timestamp:
+                    last_timestamp = ts
+        except Exception:
+            pass
 
     for meta in glob("election_*.json"):
         try:
@@ -161,12 +165,11 @@ def scrape(
         timestamp = parse(results["TimeStamp"])
 
         if not last_timestamp or timestamp > last_timestamp:
-            timestamp = datetime.now()
-            filename = FILE_NAME.format(eid=eid, date=str(timestamp))
+            filename = FILE_NAME.format(eid=eid, date=str(datetime.now()))
             with open(filename, "w") as f:
                 json.dump(results, f)
             update_index(eid, result_file=filename)
-            last_timestamp = timestamp
+            last_timestamp = timestamp  # track API timestamp, not wall clock
             if moo:
                 play_moo()
             print(f"New Results {filename}")
