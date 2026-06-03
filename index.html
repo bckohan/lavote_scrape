@@ -65,6 +65,18 @@
     .totals-row.winner { background: #14532d33; border-radius: 4px; border-left: 3px solid #4ade80; padding-left: calc(0.6rem - 3px); }
     .totals-row.winner .totals-name { color: #4ade80; font-weight: 600; }
     .totals-row.winner .totals-pct { color: #4ade80; }
+    .drop-table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+    .drop-table-header h3 { margin: 0; }
+    #btn-copy-csv { background: #334155; color: #e2e8f0; border: none; padding: 0.3rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+    #btn-copy-csv:hover { background: #475569; }
+    #btn-copy-csv.copied { background: #14532d; color: #4ade80; }
+    .drop-table-wrap { overflow-x: auto; }
+    .drop-table { border-collapse: collapse; font-size: 0.78rem; white-space: nowrap; width: 100%; }
+    .drop-table th, .drop-table td { padding: 0.3rem 0.6rem; text-align: right; border-bottom: 1px solid #1e2d3d; }
+    .drop-table th { color: #64748b; font-weight: 500; position: sticky; top: 0; background: #0f172a; }
+    .drop-table td:first-child, .drop-table th:first-child { text-align: left; position: sticky; left: 0; background: #0f172a; z-index: 1; min-width: 9rem; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+    .drop-table tr:last-child td { border-bottom: none; font-weight: 600; color: #94a3b8; border-top: 1px solid #334155; }
+    .drop-table .winner-cell { color: #4ade80; }
     @media (max-width: 480px) { .chart-wrap { height: 220px; } .detail-title h2 { font-size: 1.1rem; } #detail-view { padding-left: 0; padding-right: 0; } }
 
     @media (min-width: 600px) {
@@ -514,6 +526,13 @@ function renderDetail(eid, contestId) {
           <h3>Votes per Drop</h3>
           <div class="chart-wrap"><canvas id="chart-dropsize"></canvas></div>
         </div>
+        <div class="chart-section" id="drop-table-section">
+          <div class="drop-table-header">
+            <h3>Drop Data</h3>
+            <button id="btn-copy-csv">Copy CSV</button>
+          </div>
+          <div class="drop-table-wrap"></div>
+        </div>
       </div>
     </div>
   `;
@@ -743,6 +762,86 @@ function renderDetail(eid, contestId) {
   totalRow.className = 'totals-total-row';
   totalRow.innerHTML = `<span>Total votes</span><strong>${contestTotal.toLocaleString()}</strong>`;
   totalsSection.appendChild(totalRow);
+
+  // Build drop data table
+  // Each drop column: batch votes = series[i].votes - series[i-1].votes (series[0] diffs against 0)
+  const dropBatch = series.map((entry, i) => {
+    const prev = series[i - 1];
+    const batchTotal = Object.keys(entry.votes).reduce((s, cid) => {
+      return s + ((entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0));
+    }, 0);
+    const byCandidate = {};
+    for (const cid of contest.candidateIds) {
+      byCandidate[cid] = (entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0);
+    }
+    return { ts: entry.ts, batchTotal, byCandidate };
+  });
+
+  const table = document.createElement('table');
+  table.className = 'drop-table';
+
+  // Header row: candidate name col + one col per drop
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  hrow.insertCell().textContent = 'Candidate';
+  dropBatch.forEach(drop => {
+    const th = document.createElement('th');
+    th.textContent = drop.ts;
+    hrow.appendChild(th);
+  });
+
+  // One row per candidate in rank order
+  const tbody = table.createTBody();
+  allRanked.forEach((cid, rank) => {
+    const cand = candidateById.get(cid);
+    const tr = tbody.insertRow();
+    const nameCell = tr.insertCell();
+    nameCell.textContent = cand?.name || String(cid);
+    if (rank < contest.seats) nameCell.classList.add('winner-cell');
+    dropBatch.forEach(drop => {
+      const v = drop.byCandidate[cid] || 0;
+      const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(1) : '0.0';
+      const td = tr.insertCell();
+      td.textContent = `${v.toLocaleString()} (${pct}%)`;
+      if (rank < contest.seats) td.classList.add('winner-cell');
+    });
+  });
+
+  // Total row
+  const tfoot = table.createTFoot();
+  const footRow = tfoot.insertRow();
+  footRow.insertCell().textContent = 'Total votes';
+  dropBatch.forEach(drop => {
+    footRow.insertCell().textContent = drop.batchTotal.toLocaleString();
+  });
+
+  document.querySelector('#drop-table-section .drop-table-wrap').appendChild(table);
+
+  // CSV copy
+  document.getElementById('btn-copy-csv').addEventListener('click', () => {
+    const rows = [
+      ['Candidate', ...dropBatch.map(d => d.ts)],
+      ...allRanked.map(cid => {
+        const cand = candidateById.get(cid);
+        return [
+          cand?.name || String(cid),
+          ...dropBatch.map(drop => {
+            const v = drop.byCandidate[cid] || 0;
+            const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(1) : '0.0';
+            return `${v} (${pct}%)`;
+          }),
+        ];
+      }),
+      ['Total votes', ...dropBatch.map(d => d.batchTotal)],
+    ];
+    const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    navigator.clipboard.writeText(csv).then(() => {
+      const btn = document.getElementById('btn-copy-csv');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy CSV'; btn.classList.remove('copied'); }, 2000);
+    });
+  });
 }
 
 function filterContests(query) {
