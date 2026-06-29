@@ -1099,11 +1099,7 @@ function renderDetail(eid, contestId) {
         const cand = candidateById.get(cid);
         return [
           cand?.name || String(cid),
-          ...dropBatch.map(drop => {
-            const v = drop.byCandidate[cid] || 0;
-            const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(2) : '0.00';
-            return `${v} (${pct}%)`;
-          }),
+          ...dropBatch.map(drop => drop.byCandidate[cid] || 0),
         ];
       }),
       ['Total votes', ...dropBatch.map(d => d.batchTotal)],
