@@ -204,6 +204,48 @@ function parseLabel(filename) {
   return `${+month}/${+day} ${hour}:${min}`;
 }
 
+// Parse a filename into display label plus fields used for day grouping.
+// `t` treats the Pacific wall-clock as UTC — only used for relative gaps and
+// day bucketing, so the fictional frame is consistent and timezone-safe.
+function parseStamp(filename) {
+  const m = filename.match(/_(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return { label: filename, t: 0, day: filename, dayKey: filename };
+  const [, year, month, day, hour, min] = m;
+  return {
+    label: `${+month}/${+day} ${hour}:${min}`,
+    t: Date.UTC(+year, +month - 1, +day, +hour, +min),
+    day: `${+month}/${+day}`,
+    dayKey: `${year}-${month}-${day}`,
+  };
+}
+
+// Bucket drops into the "Per Day" view: a single election-night bar (the first
+// drop plus every following drop within `gapHours` of the previous one), then
+// one bar per Pacific calendar day. Returns { label, endIndex } per group,
+// where endIndex points at the group's last drop in `series`.
+function groupDropsByDay(series, gapHours = 6) {
+  if (series.length === 0) return [];
+  const gapMs = gapHours * 3600 * 1000;
+  let eNightEnd = 0;
+  for (let k = 1; k < series.length; k++) {
+    if (series[k].t - series[k - 1].t >= gapMs) break;
+    eNightEnd = k;
+  }
+  const groups = [{ label: 'e-night', endIndex: eNightEnd }];
+  let j = eNightEnd + 1;
+  while (j < series.length) {
+    let end = j;
+    while (end + 1 < series.length && series[end + 1].dayKey === series[j].dayKey) end++;
+    groups.push({ label: series[j].day, endIndex: end });
+    j = end + 1;
+  }
+  return groups;
+}
+
+function cumulativeTotal(entry) {
+  return Object.keys(entry.votes).reduce((s, cid) => s + (entry.votes[cid] || 0), 0);
+}
+
 // ─────────────────────────── Data loading ────────────────────────
 
 async function loadIndex() {
@@ -259,15 +301,16 @@ function buildTimeSeries(filenames, responses, contestById) {
     for (const row of resp.Data) {
       if (row.ReferenceType === 'CAND') voteMap.set(row.ReferenceID, row.Value);
     }
-    return { ts: parseLabel(filename), voteMap };
+    const stamp = parseStamp(filename);
+    return { ts: stamp.label, t: stamp.t, day: stamp.day, dayKey: stamp.dayKey, voteMap };
   });
 
   const series = new Map();
   for (const [contestId, contest] of contestById) {
-    series.set(contestId, parsedDrops.map(({ ts, voteMap }) => {
+    series.set(contestId, parsedDrops.map(({ ts, t, day, dayKey, voteMap }) => {
       const votes = {};
       for (const cid of contest.candidateIds) votes[cid] = voteMap.get(cid) ?? 0;
-      return { ts, votes };
+      return { ts, t, day, dayKey, votes };
     }));
   }
 
@@ -616,7 +659,13 @@ function renderDetail(eid, contestId) {
           <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
         </div>
         <div class="chart-section" id="dropsize-section">
-          <h3>Votes per Drop</h3>
+          <div class="chart-section-header">
+            <h3>Votes per Drop</h3>
+            <div class="toggle-group" id="dropsize-mode-toggle">
+              <button class="toggle-btn active" data-mode="drop">Per Drop</button>
+              <button class="toggle-btn" data-mode="day">Per Day</button>
+            </div>
+          </div>
           <div class="chart-wrap"><canvas id="chart-dropsize"></canvas></div>
         </div>
         <div class="chart-section" id="drop-table-section">
@@ -831,39 +880,71 @@ function renderDetail(eid, contestId) {
       '<h3>Batch Composition</h3><p class="status-msg">No drops yet.</p>';
   }
 
-  // Votes per drop bar chart
+  // Votes per drop bar chart — toggle between per-drop and per-day aggregation
   if (series.length >= 1) {
-    const dropLabels = series.map(entry => entry.ts);
-    const dropData = series.map((entry, i) => {
+    // Per-drop: new votes added by each individual drop.
+    const perDropLabels = series.map(entry => entry.ts);
+    const perDropData = series.map((entry, i) => {
       const prev = series[i - 1];
-      return Object.keys(entry.votes).reduce((s, cid) => {
-        return s + ((entry.votes[cid] || 0) - (prev ? prev.votes[cid] || 0 : 0));
-      }, 0);
+      return cumulativeTotal(entry) - (prev ? cumulativeTotal(prev) : 0);
     });
-    activeCharts.push(new Chart(document.getElementById('chart-dropsize'), {
-      type: 'bar',
-      data: {
-        labels: dropLabels,
-        datasets: [{
-          label: 'New votes',
-          data: dropData,
-          backgroundColor: RANKED_COLORS[2],
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
-          y: {
-            title: { display: true, text: 'New votes', color: '#94a3b8' },
-            ticks: { color: '#94a3b8', callback: v => v.toLocaleString() },
-            grid: { color: '#1e293b' },
+
+    // Per-day: new votes added across each day group (e-night, then by day).
+    const groups = groupDropsByDay(series);
+    const perDayLabels = groups.map(g => g.label);
+    const perDayData = groups.map((g, gi) => {
+      const cur = cumulativeTotal(series[g.endIndex]);
+      const prevIdx = gi > 0 ? groups[gi - 1].endIndex : -1;
+      return cur - (prevIdx >= 0 ? cumulativeTotal(series[prevIdx]) : 0);
+    });
+
+    let dropsizeChart = null;
+    const renderDropsize = mode => {
+      if (dropsizeChart) {
+        const idx = activeCharts.indexOf(dropsizeChart);
+        if (idx >= 0) activeCharts.splice(idx, 1);
+        dropsizeChart.destroy();
+      }
+      const isDay = mode === 'day';
+      dropsizeChart = new Chart(document.getElementById('chart-dropsize'), {
+        type: 'bar',
+        data: {
+          labels: isDay ? perDayLabels : perDropLabels,
+          datasets: [{
+            label: 'New votes',
+            data: isDay ? perDayData : perDropData,
+            backgroundColor: RANKED_COLORS[2],
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
+            y: {
+              title: { display: true, text: 'New votes', color: '#94a3b8' },
+              ticks: { color: '#94a3b8', callback: v => v.toLocaleString() },
+              grid: { color: '#1e293b' },
+            },
           },
         },
-      },
-    }));
+      });
+      dropsizeChart._mode = mode;
+      activeCharts.push(dropsizeChart);
+    };
+    renderDropsize('drop');
+
+    document.getElementById('dropsize-mode-toggle').addEventListener('click', e => {
+      const btn = e.target.closest('.toggle-btn');
+      if (!btn) return;
+      const mode = btn.dataset.mode;
+      if (mode === dropsizeChart._mode) return;
+      document.querySelectorAll('#dropsize-mode-toggle .toggle-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === mode)
+      );
+      renderDropsize(mode);
+    });
   } else {
     document.getElementById('dropsize-section').innerHTML =
       '<h3>Votes per Drop</h3><p class="status-msg">No drops yet.</p>';
