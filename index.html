@@ -410,7 +410,7 @@ function getLeader(contestId, electionData) {
   }
 
   const cand = topId ? candidateById.get(topId) : null;
-  const pct = total > 0 ? (topVotes / total * 100).toFixed(1) : '0.0';
+  const pct = total > 0 ? (topVotes / total * 100).toFixed(2) : '0.00';
 
   const step = Math.max(1, Math.floor(points.length / 8));
   const sparkData = points
@@ -710,7 +710,7 @@ function renderDetail(eid, contestId) {
           callbacks: {
             label: ctx => {
               const v = ctx.parsed.y;
-              return ` ${ctx.dataset.label}: ${lineChart._mode === 'votes' ? v.toLocaleString() : v.toFixed(1) + '%'}`;
+              return ` ${ctx.dataset.label}: ${lineChart._mode === 'votes' ? v.toLocaleString() : v.toFixed(2) + '%'}`;
             },
           },
         },
@@ -886,7 +886,7 @@ function renderDetail(eid, contestId) {
   allRanked.forEach((cid, rank) => {
     const cand = candidateById.get(cid);
     const votes = finalVotes[cid] || 0;
-    const pct = contestTotal > 0 ? (votes / contestTotal * 100).toFixed(1) : '0.0';
+    const pct = contestTotal > 0 ? (votes / contestTotal * 100).toFixed(2) : '0.00';
     const color = qualified.includes(cid)
       ? qualifiedColors[qualified.indexOf(cid)]
       : OTHERS_COLOR;
@@ -951,7 +951,7 @@ function renderDetail(eid, contestId) {
     if (isWinnerCell) nameCell.classList.add('winner-cell');
     dropBatch.forEach(drop => {
       const v = drop.byCandidate[cid] || 0;
-      const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(1) : '0.0';
+      const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(2) : '0.00';
       const td = tr.insertCell();
       td.textContent = `${v.toLocaleString()} (${pct}%)`;
       if (isWinnerCell) td.classList.add('winner-cell');
@@ -978,7 +978,7 @@ function renderDetail(eid, contestId) {
           cand?.name || String(cid),
           ...dropBatch.map(drop => {
             const v = drop.byCandidate[cid] || 0;
-            const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(1) : '0.0';
+            const pct = drop.batchTotal > 0 ? (v / drop.batchTotal * 100).toFixed(2) : '0.00';
             return `${v} (${pct}%)`;
           }),
         ];
