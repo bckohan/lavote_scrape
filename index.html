@@ -624,8 +624,14 @@ function renderDetail(eid, contestId) {
     return;
   }
 
-  const { qualified, others, series } = qualifying;
+  const { qualified, others, series, contestTotal } = qualifying;
   const { candidateById } = electionData;
+
+  // The percent-of-total axis only makes sense once the count is settled —
+  // roughly two weeks after election day. Before then, contestTotal isn't final.
+  const electionMs = Date.parse(`${electionData.election_date}T00:00:00`);
+  const showPctAxis = Number.isFinite(electionMs) &&
+    (Date.now() - electionMs) > 14 * 24 * 3600 * 1000;
 
   // Build the detail screen HTML
   document.getElementById('detail-title').textContent = contest.title;
@@ -906,28 +912,64 @@ function renderDetail(eid, contestId) {
         dropsizeChart.destroy();
       }
       const isDay = mode === 'day';
+      const data = isDay ? perDayData : perDropData;
+
+      const scales = {
+        x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
+        y: {
+          title: { display: true, text: 'New votes', color: '#94a3b8' },
+          ticks: { color: '#94a3b8', callback: v => v.toLocaleString() },
+          grid: { color: '#1e293b' },
+        },
+      };
+
+      // Once the total is final, mirror the votes axis with a percent-of-total
+      // axis on the right. Drive the shared domain from the percent side so the
+      // right axis tops out on a round 5% multiple; the left axis keeps round
+      // vote ticks, its non-round top edge left unlabeled via includeBounds.
+      // Exact percentages live in the hover tooltip below.
+      const maxBar = Math.max(...data, 0);
+      const pctActive = showPctAxis && contestTotal > 0 && maxBar > 0;
+      if (pctActive) {
+        const pctMax = Math.max(5, Math.ceil(maxBar / contestTotal * 100 / 5) * 5);
+        scales.y.min = 0;
+        scales.y.max = pctMax / 100 * contestTotal;
+        scales.y.ticks.includeBounds = false;
+        scales.yPct = {
+          position: 'right',
+          min: 0,
+          max: pctMax,
+          ticks: { stepSize: 5, color: '#94a3b8', callback: v => v + '%' },
+          title: { display: true, text: '% of total vote', color: '#94a3b8' },
+          grid: { drawOnChartArea: false },
+        };
+      }
+
       dropsizeChart = new Chart(document.getElementById('chart-dropsize'), {
         type: 'bar',
         data: {
           labels: isDay ? perDayLabels : perDropLabels,
           datasets: [{
             label: 'New votes',
-            data: isDay ? perDayData : perDropData,
+            data,
             backgroundColor: RANKED_COLORS[2],
           }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
-            y: {
-              title: { display: true, text: 'New votes', color: '#94a3b8' },
-              ticks: { color: '#94a3b8', callback: v => v.toLocaleString() },
-              grid: { color: '#1e293b' },
-            },
+          plugins: {
+            legend: { display: false },
+            tooltip: pctActive ? {
+              callbacks: {
+                label: ctx => {
+                  const v = ctx.parsed.y;
+                  return `${ctx.dataset.label}: ${v.toLocaleString()} (${(v / contestTotal * 100).toFixed(2)}%)`;
+                },
+              },
+            } : undefined,
           },
+          scales,
         },
       });
       dropsizeChart._mode = mode;
@@ -951,7 +993,7 @@ function renderDetail(eid, contestId) {
   }
 
   // Build current totals pane — all candidates ranked by final votes
-  const { finalVotes, contestTotal } = qualifying;
+  const { finalVotes } = qualifying;
   const allRanked = [...contest.candidateIds]
     .sort((a, b) => (finalVotes[b] || 0) - (finalVotes[a] || 0));
 
