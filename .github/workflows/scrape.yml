@@ -5,8 +5,8 @@ on:
   # relaunch hourly instead of running one forever; each new run cancels the
   # previous one (see `concurrency` below). Schedules run only from the
   # default branch and may be delayed a few minutes under load.
-  schedule:
-    - cron: "0 * * * *"
+  # schedule:
+  #   - cron: "0 * * * *"
   # Allow kicking it off (or re-starting it) by hand.
   workflow_dispatch:
     inputs:
