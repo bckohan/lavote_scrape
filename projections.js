@@ -13,6 +13,12 @@
     return v === 'off' ? false : v === 'on' ? true : null;
   }
 
+  // ?projections_url=http://localhost:8001 — local preview of a `lavote serve-site`; localhost only.
+  function urlOverride() {
+    const v = new URLSearchParams(location.search).get('projections_url');
+    return v && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/[\w./-]*)?$/.test(v) ? v : null;
+  }
+
   async function getJSON(url, ms = 8000) {
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), ms);
@@ -34,7 +40,7 @@
       const cfg = await getJSON('config.json').catch(() => null);
       const p = cfg && cfg.projections;
       if (!p || typeof p.url !== 'string' || !URL_RE.test(p.url) || (!p.enabled && ov !== true)) { disable(); return false; }
-      const url = p.url.replace(/\/$/, '');
+      const url = (urlOverride() || p.url).replace(/\/$/, '');
       const m = await getJSON(`${url}/index.json`);
       if (!m || Math.floor(m.schema_version) !== SCHEMA_MAJOR || !m.elections || typeof m.elections !== 'object') {
         disable(); return false;

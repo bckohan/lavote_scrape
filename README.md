@@ -57,7 +57,7 @@ When `config.json` has `projections.enabled: true`, the viewer fetches model pro
 URL in `projections.url` (a separate, private modeling repo publishes them to GitHub Pages) and shows
 a "Projection" section on contests the model marks publishable, plus a "Movers" panel on the index.
 Set `enabled` to `false` and commit to hide all projections within a minute. `?projections=off` in the
-URL disables them for one session; `?projections=on` forces the fetch even when disabled (for testing).
+URL disables them for one session; `?projections=on` forces the fetch even when disabled (for testing), and `?projections_url=http://localhost:8001` points the viewer at a locally served projections site (localhost only).
 
 ## GitHub Actions
 
