@@ -1,0 +1,4 @@
+{ "schema_version": 1, "generated_at": "2026-11-05T16:20:00-08:00", "model_version": "fixture",
+  "elections": { "4348": { "source_commit": "abc123", "latest_drop": "2026-11-05T16:12:00-08:00",
+    "turnout": "4348/turnout.json", "movers": "4348/movers.json",
+    "contests": { "10776": { "file": "4348/contests/10776.json", "publish": true, "confidence": "data" } } } } }

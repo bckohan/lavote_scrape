@@ -1,0 +1,4 @@
+{ "schema_version": 1, "prior": { "pdi_county": null, "pdi_city": null },
+  "history": [ { "ts": "2026-11-05T16:12:00-08:00", "counted": 2650000, "county": { "mean": 3210000, "p05": 3050000, "p95": 3380000 },
+                 "city": { "mean": 1230000, "p05": 1150000, "p95": 1310000 }, "model_used": "ratio" } ],
+  "pending": [ { "ts": "2026-11-06T09:00:00", "label": "fri 11/06 9am", "new_ballots": { "mean": 110000, "p05": 70000, "p95": 160000 } } ] }

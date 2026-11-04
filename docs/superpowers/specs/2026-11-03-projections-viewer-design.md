@@ -23,7 +23,13 @@ untouched.
 | `docs/fixtures/projections/` (new) | Sample `index.json`, `turnout.json`, one contest file, `movers.json` for local testing |
 | `CLAUDE.md`, `README.md` | Document the switch and the new files |
 
-`scrape.py`, `scrape.yml`, `index.json`, and `data/` are not modified.
+`scrape.py`, `index.json`, and `data/` are not modified. `scrape.yml` gets one change: the
+checkout step uses a PAT (`SCRAPE_PUSH_TOKEN`) instead of the default `GITHUB_TOKEN`, because
+GitHub does not run `push`-triggered workflows for pushes made with `GITHUB_TOKEN`; without it
+`notify-modeling.yml` would never fire on scraper commits. (Decided 2026-11-03 after review.)
+
+The Movers panel lists only contests whose `publish` flag is true (decided 2026-11-03; the
+model's full movers list stays in the private repo).
 
 ## Gating (both must pass)
 

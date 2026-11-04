@@ -1,0 +1,15 @@
+{ "schema_version": 1, "contest_id": 10776, "title": "STATE SENATOR, 26th District", "contest_type": "D_v_D",
+  "publish": true, "confidence": "data", "gate_reasons": [], "primary_contest_id": 10090,
+  "as_of": "2026-11-05T16:12:00-08:00",
+  "candidates": [
+    { "id": 25544, "name": "SARAH RASCÓN", "party": "Democratic", "votes": 41200, "share": 0.471,
+      "final": { "mean": 0.512, "p05": 0.489, "p95": 0.536 }, "p_win": 0.79 },
+    { "id": 25545, "name": "SARA HERNANDEZ", "party": "Democratic", "votes": 46270, "share": 0.529,
+      "final": { "mean": 0.488, "p05": 0.464, "p95": 0.511 }, "p_win": 0.21 } ],
+  "trajectory": [
+    { "ts": "2026-11-06T09:00:00", "label": "fri 11/06 9am", "drop_size": { "mean": 110000, "p05": 70000, "p95": 160000 },
+      "candidates": { "25544": { "share": { "mean": 0.480, "p05": 0.470, "p95": 0.490 } }, "25545": { "share": { "mean": 0.520, "p05": 0.510, "p95": 0.530 } } } },
+    { "ts": "2026-11-27T12:00:00", "label": "fri 11/27 12pm", "drop_size": { "mean": 20000, "p05": 5000, "p95": 60000 },
+      "candidates": { "25544": { "share": { "mean": 0.512, "p05": 0.489, "p95": 0.536 } }, "25545": { "share": { "mean": 0.488, "p05": 0.464, "p95": 0.511 } } } } ],
+  "history": [ { "as_of": "2026-11-04T16:10:00-08:00", "candidates": { "25544": { "final_mean": 0.505, "p05": 0.47, "p95": 0.54, "p_win": 0.62 } } } ],
+  "diagnostics": { "divergences": 0.0, "rhat_max": 1.01, "drops_observed": 9 } }

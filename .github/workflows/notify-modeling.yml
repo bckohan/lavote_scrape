@@ -1,0 +1,17 @@
+name: Notify modeling repo
+on:
+  push:
+    branches: [main]
+    paths: ['data/**', 'index.json']
+  workflow_dispatch:
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch new-drop to lavote_modeling
+        env:
+          GH_TOKEN: ${{ secrets.MODELING_DISPATCH_TOKEN }}
+        run: >
+          gh api repos/bckohan/lavote_modeling/dispatches
+          -f event_type=new-drop
+          -f 'client_payload[sha]=${{ github.sha }}'
