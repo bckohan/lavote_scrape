@@ -178,6 +178,45 @@
       });
       S.charts.push(chart);
 
+      // Second chart: votes counted in this race, observed and projected (cumulative A+B, 90% band).
+      const v = data.votes;
+      const vTraj = data.trajectory.map(t => (t && t.votes && fin(t.votes.mean) && fin(t.votes.p05) && fin(t.votes.p95)) ? t.votes : null);
+      if (v && fin(v.counted) && v.final && fin(v.final.mean) && vTraj.some(Boolean)) {
+        const obsTot = series.map(s => Object.values(s.votes).reduce((a, b) => a + b, 0) || null);
+        const lastTot = obsTot[obsTot.length - 1];
+        const vMean = [...pad(obsTot.length - 1), lastTot, ...vTraj.map(t => t ? t.mean : null)];
+        const vLo = [...pad(obsTot.length - 1), lastTot, ...vTraj.map(t => t ? t.p05 : null)];
+        const vHi = [...pad(obsTot.length - 1), lastTot, ...vTraj.map(t => t ? t.p95 : null)];
+        const vColor = '#7dd3fc';
+        const vSets = [
+          { label: 'Votes counted', data: [...obsTot, ...pad(futLabels.length)], borderColor: vColor, backgroundColor: vColor, pointRadius: 3, borderWidth: 2, tension: 0.1 },
+          { label: 'Votes counted (projected)', data: vMean, borderColor: vColor, borderDash: [6, 4], pointRadius: 0, borderWidth: 2, tension: 0.1 },
+          { label: 'p95', projBand: true, data: vHi, borderColor: 'transparent', backgroundColor: band(vColor), pointRadius: 0, fill: '+1', tension: 0.1 },
+          { label: 'p05', projBand: true, data: vLo, borderColor: 'transparent', pointRadius: 0, fill: false, tension: 0.1 },
+        ];
+        const fmtN = x => Math.round(x).toLocaleString();
+        const vWrap = document.createElement('div');
+        vWrap.innerHTML = `<div class="proj-summary">Projected votes in this race: <strong>${fmtN(v.final.mean)}</strong>
+          (${fmtN(v.final.p05)} – ${fmtN(v.final.p95)}) · ${fmtN(v.counted)} counted so far</div>
+          <div class="chart-wrap"><canvas id="chart-projection-votes"></canvas></div>`;
+        const caveat = mount.querySelector('.proj-caveat');
+        mount.insertBefore(vWrap, caveat);
+        const vChart = new Chart(vWrap.querySelector('#chart-projection-votes'), {
+          type: 'line', data: { labels, datasets: vSets },
+          options: { responsive: true, maintainAspectRatio: false,
+            plugins: {
+              projNowLine: { index: obsLabels.length - 1 },
+              legend: { position: 'top', labels: { color: '#e2e8f0', boxWidth: 12,
+                filter: (item, chartData) => !(chartData.datasets[item.datasetIndex] || {}).projBand } },
+              tooltip: { mode: 'index', intersect: false, filter: i => !i.dataset.projBand,
+                callbacks: { label: c => c.parsed.y == null ? null : ` ${c.dataset.label}: ${fmtN(c.parsed.y)}` } } },
+            scales: { x: { ticks: { color: '#94a3b8', maxRotation: 45 }, grid: { color: '#1e293b' } },
+                      y: { title: { display: true, text: 'Votes in this race', color: '#94a3b8' }, ticks: { color: '#94a3b8', callback: val => fmtN(val) }, grid: { color: '#1e293b' } } } },
+          plugins: [nowLine],
+        });
+        S.charts.push(vChart);
+      }
+
       // Drop table: rows are per candidate, so add a "Projected final" column (mean with 90% band).
       const table = document.querySelector('#drop-table-section table');
       if (table && !table.querySelector('th[data-proj]')) {
