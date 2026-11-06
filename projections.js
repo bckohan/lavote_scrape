@@ -121,6 +121,7 @@
       if (!fin(winP)) { hide(mount); return; }
       const verb = yes ? 'of passing' : 'of winning';
       const prior = data.confidence === 'prior';
+      const seats = Number.isInteger(data.seats) && data.seats > 1 ? data.seats : 1;
 
       // Chart data.
       const obsLabels = series.map(s => s.ts);
@@ -155,8 +156,11 @@
 
       const html = `
       <h3>Projection</h3>
-      <div class="proj-summary${prior ? ' prior' : ''}">Projected final: <strong>${esc(subject.name)}</strong>
-        ${fmtShare(subject.final)} · ${Math.round(winP * 100)}% chance ${verb}${prior ? ' <em>(early, mostly prior)</em>' : ''}${contest && contest.multiCounty ? ' · LA County votes only' : ''}</div>
+      <div class="proj-summary${prior ? ' prior' : ''}">${seats > 1
+        ? `${seats} seats · chance of a seat: ` + [...cands].sort((a, b) => b.p_win - a.p_win)
+            .map(c => `<strong>${esc(c.name)}</strong> ${Math.round(c.p_win * 100)}%`).join(' · ')
+        : `Projected final: <strong>${esc(subject.name)}</strong> ${fmtShare(subject.final)} · ${Math.round(winP * 100)}% chance ${verb}`
+        }${prior ? ' <em>(early, mostly prior)</em>' : ''}${contest && contest.multiCounty ? ' · LA County votes only' : ''}</div>
       <div class="chart-wrap"><canvas id="chart-projection"></canvas></div>
       <div class="proj-caveat">Model estimate, not an official count. 90% band. Updated ${esc(data.as_of)}.
         <a href="${esc(S.url)}/methods.html" target="_blank" rel="noopener">How this works</a></div>`;
@@ -267,7 +271,7 @@
       const html = `<details ${collapsed ? '' : 'open'}><summary>Movers — races the model expects to shift most</summary>
       <table class="movers-table"><thead><tr><th>Contest</th><th>Leader</th><th>Now</th><th>Projected</th><th>Flip</th></tr></thead><tbody>
       ${body.join('')}</tbody></table>
-      <div class="proj-caveat" style="padding:6px 14px">Margins are leader minus runner-up, in points. Model estimates.</div></details>`;
+      <div class="proj-caveat" style="padding:6px 14px">Margins are leader minus runner-up, in points; for multi-seat races, last seat holder minus first candidate out. Model estimates.</div></details>`;
       mount.innerHTML = html;
       mount.hidden = false;
       // innerHTML above recreated <details>, so this listener never stacks on a persistent element.
