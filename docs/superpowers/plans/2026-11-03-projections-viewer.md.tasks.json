@@ -1,0 +1,49 @@
+{
+ "planPath": "docs/superpowers/plans/2026-11-03-projections-viewer.md",
+ "tasks": [
+  {
+   "id": 1,
+   "subject": "Task 1: Switch, dispatch workflow, fixtures",
+   "status": "completed",
+   "description": "See plan Task 1: Switch, dispatch workflow, fixtures.\n\n```json:metadata\n{\"files\": [\"config.json\", \".github/workflows/notify-modeling.yml\", \"docs/fixtures/projections/\"], \"verifyCommand\": \"python3 -c \\\"import json,glob; [json.load(open(f)) for f in ['config.json']+glob.glob('docs/fixtures/projections/**/*.json', recursive=True)]; print('ok')\\\"\", \"acceptanceCriteria\": [\"config parses\", \"workflow valid\", \"fixtures schema_version 1\"]}\n```"
+  },
+  {
+   "id": 2,
+   "subject": "Task 2: projections.js load and gate",
+   "status": "completed",
+   "description": "See plan Task 2: projections.js load and gate.\n\n```json:metadata\n{\"files\": [\"projections.js\", \"index.html\"], \"verifyCommand\": \"manual: http.server + console isPublishable\", \"acceptanceCriteria\": [\"fixture publishable true/false\", \"?projections=off makes no remote request\", \"remote 404 harmless\"]}\n```",
+   "blockedBy": [
+    1
+   ]
+  },
+  {
+   "id": 3,
+   "subject": "Task 3: Detail-page projection section",
+   "status": "completed",
+   "description": "See plan Task 3: Detail-page projection section.\n\n```json:metadata\n{\"files\": [\"projections.js\", \"index.html\"], \"verifyCommand\": \"manual with fixtures on #/4348/10776\", \"acceptanceCriteria\": [\"summary line\", \"dashed projection + band\", \"no section when unpublished\"]}\n```",
+   "blockedBy": [
+    2
+   ]
+  },
+  {
+   "id": 4,
+   "subject": "Task 4: Movers panel",
+   "status": "completed",
+   "description": "See plan Task 4: Movers panel.\n\n```json:metadata\n{\"files\": [\"projections.js\", \"index.html\"], \"verifyCommand\": \"manual with fixtures on #/\", \"acceptanceCriteria\": [\"panel with links\", \"collapsed state persists\", \"hidden when off\"]}\n```",
+   "blockedBy": [
+    2
+   ]
+  },
+  {
+   "id": 5,
+   "subject": "Task 5: Docs, final checks, PR",
+   "status": "completed",
+   "description": "See plan Task 5: Docs, final checks, PR.\n\n```json:metadata\n{\"files\": [\"README.md\", \"CLAUDE.md\"], \"verifyCommand\": \"gh pr create --base main --head modeling\", \"acceptanceCriteria\": [\"README Projections section\", \"CLAUDE.md lists files\", \"manual matrix passes\"]}\n```",
+   "blockedBy": [
+    3,
+    4
+   ]
+  }
+ ],
+ "lastUpdated": "2026-11-04T05:28:15.485882+00:00"
+}

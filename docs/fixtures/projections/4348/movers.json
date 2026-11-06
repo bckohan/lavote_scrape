@@ -1,0 +1,4 @@
+{ "schema_version": 1, "as_of": "2026-11-05T16:12:00-08:00", "rows": [
+  { "contest_id": 10776, "title": "STATE SENATOR, 26th District", "leader": "SARA HERNANDEZ",
+    "current_margin": 0.058, "projected_margin": { "mean": -0.024, "p05": -0.072, "p95": 0.022 },
+    "p_flip": 0.79, "on_allowlist": true, "publish": true } ] }

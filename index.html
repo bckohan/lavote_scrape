@@ -29,7 +29,16 @@
     .tier-header:first-child { border-top: none; padding-top: 10px; }
     .tier-header h2 { margin: 0; font-size: 0.92rem; font-weight: 600; color: #94a3b8; }
     .tier-header p { margin: 4px 0 0; font-size: 0.78rem; line-height: 1.4; color: #d97706; }
+    #movers-panel { margin: 12px 16px 0; background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; }
+    #movers-panel summary { cursor: pointer; padding: 10px 14px; font-weight: 600; }
+    .movers-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .movers-table td, .movers-table th { padding: 6px 10px; border-top: 1px solid #1e293b; text-align: left; }
+    .movers-table a { color: #7dd3fc; text-decoration: none; }
     .multi-county-warning { margin: 12px 16px 0; padding: 10px 14px; background: #2a1d08; border: 1px solid #92400e; border-left: 4px solid #f59e0b; border-radius: 6px; color: #fcd34d; font-size: 0.85rem; line-height: 1.45; }
+    .proj-summary { font-size: 1rem; margin: 4px 0 8px; }
+    .proj-summary.prior { color: #94a3b8; }
+    .proj-caveat { font-size: 0.75rem; color: #94a3b8; margin-top: 6px; }
+    .proj-caveat a { color: #7dd3fc; }
     .group-header { padding: 10px 16px 3px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #475569; }
     .contest-row { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid #141420; cursor: pointer; gap: 10px; min-height: 52px; text-decoration: none; color: inherit; }
     .contest-row:hover { background: #15152a; }
@@ -123,6 +132,7 @@
   <div class="search-wrap">
     <input type="search" id="search-input" placeholder="Search contests or candidates…" autocomplete="off">
   </div>
+  <section id="movers-panel" hidden></section>
   <main id="contest-list"><p class="status-msg">Loading…</p></main>
 </div>
 
@@ -138,6 +148,7 @@
   <div id="detail-body"></div>
 </div>
 
+<script src="projections.js"></script>
 <script>
 // ─────────────────────────── Constants ───────────────────────────
 
@@ -434,6 +445,7 @@ async function init() {
     }
     sel.addEventListener('change', async () => {
       state.currentEid = sel.value;
+      if (window.Projections) await Projections.init(state.currentEid).catch(() => false);
       if (!state.elections[state.currentEid]) await loadElection(state.currentEid);
       if (location.hash !== '#/') {
         location.hash = '#/';
@@ -451,6 +463,7 @@ async function init() {
     });
 
     window.addEventListener('hashchange', route);
+    if (window.Projections) await Projections.init(state.currentEid).catch(() => false);
     await route();
     startPolling();
   } catch (err) {
@@ -472,19 +485,29 @@ async function startPolling() {
     try {
       const fresh = await fetch('index.json', { cache: 'no-store' }).then(r => r.json());
       let updated = false;
+      let dataUpdated = false;
       for (const eid of Object.keys(fresh)) {
         const known = state.index?.[eid];
         const freshCount = fresh[eid].result_files.length;
         const knownCount = known?.result_files.length ?? 0;
         if (freshCount > knownCount) {
           updated = true;
+          dataUpdated = true;
           state.index[eid] = fresh[eid];
           delete state.elections[eid]; // evict cache so loadElection re-fetches
         }
       }
+      if (window.Projections) {
+        const before = Projections.version();
+        await Projections.init(state.currentEid).catch(() => false);
+        const after = Projections.version();
+        // Re-render on a real version change (or first appearance); a transient fetch failure
+        // (value -> null) must not flap the page.
+        if ((before && after && before !== after) || (!before && after)) updated = true;
+      }
       if (updated) {
         await route();
-        showToast();
+        if (dataUpdated) showToast();
       }
     } catch (e) {
       // network blip — try again next interval
@@ -535,6 +558,7 @@ function destroySparklines() {
 function destroyActiveCharts() {
   activeCharts.forEach(c => c.destroy());
   activeCharts = [];
+  if (window.Projections) Projections.destroy();
 }
 
 function getQualifying(contestId, electionData) {
@@ -674,6 +698,7 @@ function renderIndex() {
 
   const q = document.getElementById('search-input').value;
   if (q) filterContests(q);
+  if (window.Projections) Projections.renderMovers(state.currentEid, document.getElementById('movers-panel'));
 }
 
 function renderDetail(eid, contestId) {
@@ -733,6 +758,7 @@ function renderDetail(eid, contestId) {
         <div class="chart-section" id="totals-section">
           <h3>Current Totals</h3>
         </div>
+        <div class="chart-section" id="projection-section" hidden></div>
         ${contest.type === 'Measure' && contest.measureText ? `
         <div class="chart-section" id="measure-info-section">
           <h3>Measure Text</h3>
@@ -1202,6 +1228,9 @@ function renderDetail(eid, contestId) {
       setTimeout(() => { btn.textContent = 'Copy CSV'; btn.classList.remove('copied'); }, 2000);
     });
   });
+
+  if (window.Projections) Projections.renderDetail(eid, contestId, document.getElementById('projection-section'),
+    electionData, qualified, qualifiedColors, series);
 }
 
 function filterContests(query) {

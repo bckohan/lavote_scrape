@@ -33,7 +33,7 @@ All logic lives in `lavote_scrape/scrape.py`. The `scrape` Typer command:
 
 ## CI Behavior
 
-The workflow (`.github/workflows/scrape.yml`) uses `concurrency: cancel-in-progress` so each hourly trigger kills the previous run. It always passes `--no-moo --commit --max-runtime 3900`. The default election ID is `4338`; override via `workflow_dispatch` input.
+The workflow (`.github/workflows/scrape.yml`) uses `concurrency: cancel-in-progress` so each hourly trigger kills the previous run. It always passes `--no-moo --commit` (no `--max-runtime`; the next hourly run cancels it). The default election ID is `4348`; override via `workflow_dispatch` input.
 
 ## Election Results Viewer
 
@@ -46,3 +46,11 @@ The workflow (`.github/workflows/scrape.yml`) uses `concurrency: cancel-in-progr
 **index.json**: Maintained by the scraper and kept at the repo root. It is the manifest listing elections and result files; every path in it is relative to the repo root (e.g. `data/4338/4338_....json`). The `update_index()` and `backfill_index()` functions in `scrape.py` keep it current. When `--commit` is used, `index.json` is committed alongside each new result file.
 
 **Routing**: Hash-based. `#/` = contest index; `#/{eid}/{contestId}` = contest detail.
+
+**Projections**: Optional model projections rendered behind a switch. scrape.py and scrape.yml are never involved in projections.
+- `config.json` is the switch: `projections.enabled` and `projections.url` (base URL of the modeling repo's GitHub Pages).
+- `projections.js` holds all projection fetch/gating/render logic and exports `window.Projections` with `init`, `version`, `isPublishable`, `load`, `renderDetail`, `renderMovers`, `destroy`.
+- Two gates must both pass: the local switch (`config.json`) AND the remote manifest marking the contest `publish: true`. `?projections=on|off` in the URL overrides the local switch.
+- `index.html` hook points: `<script src="projections.js">` before the inline script; `Projections.init` before the first `route()` and in the poll / election-select paths; `Projections.renderDetail` at the end of `renderDetail()`; `Projections.renderMovers` at the end of `renderIndex()`; `Projections.destroy()` in `destroyActiveCharts()`.
+- Fixtures live in `docs/fixtures/projections/`. To test locally, temporarily point `config.json`'s `projections.url` at `docs/fixtures/projections` and serve with `python3 -m http.server 8000`; restore the real URL before committing.
+- `.github/workflows/notify-modeling.yml` fires on pushes to `main` touching `data/**` or `index.json` and sends a `repository_dispatch` (`new-drop`) to the private `lavote_modeling` repo using the `MODELING_DISPATCH_TOKEN` secret.
