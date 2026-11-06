@@ -4,6 +4,8 @@
   const SCHEMA_MAJOR = 1;
   // When true, the movers panel only lists rows the model marked publishable.
   const MOVERS_PUBLISHED_ONLY = true;
+  // Only races the model gives at least this chance of changing hands are listed as movers.
+  const MOVERS_MIN_FLIP = 0.03;
   // https://host/path, or a relative path (./x, ../x, /x, x/y). No quotes, angle brackets or whitespace.
   const URL_RE = /^(https:\/\/[\w.-]+(\/[^"'<>\s]*)?|\.{0,2}\/[^"'<>\s]*|[\w.-]+(\/[^"'<>\s]*)?)$/;
   const S = { enabled: false, url: null, manifest: null, cache: new Map(), charts: [], moversSeq: 0 };
@@ -255,7 +257,7 @@
       if (!data || Math.floor(data.schema_version) !== SCHEMA_MAJOR || !Array.isArray(data.rows)) { hide(mount); return; }
       let rows = data.rows.filter(r => r && typeof r === 'object');
       if (MOVERS_PUBLISHED_ONLY) rows = rows.filter(r => r.publish !== false);
-      rows = rows.slice(0, 10);
+      rows = rows.filter(r => fin(r.p_flip) && r.p_flip >= MOVERS_MIN_FLIP);
       const m = x => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}`;
       const body = rows.map(r => {
         const cid = Number(r.contest_id);
@@ -268,10 +270,10 @@
       }).filter(Boolean);
       if (!body.length) { hide(mount); return; }
       const collapsed = lsGet('projMoversCollapsed') === '1';
-      const html = `<details ${collapsed ? '' : 'open'}><summary>Movers — races the model expects to shift most</summary>
+      const html = `<details ${collapsed ? '' : 'open'}><summary>Movers — races with at least a ${Math.round(MOVERS_MIN_FLIP * 100)}% chance of changing hands</summary>
       <table class="movers-table"><thead><tr><th>Contest</th><th>Leader</th><th>Now</th><th>Projected</th><th>Flip</th></tr></thead><tbody>
       ${body.join('')}</tbody></table>
-      <div class="proj-caveat" style="padding:6px 14px">Margins are leader minus runner-up, in points; for multi-seat races, last seat holder minus first candidate out. Model estimates.</div></details>`;
+      <div class="proj-caveat" style="padding:6px 14px">Margins are leader minus runner-up, in points; for multi-seat races, last seat holder minus first candidate out; for measures needing a supermajority, Yes's lead over or shortfall from the threshold on the same scale. Model estimates.</div></details>`;
       mount.innerHTML = html;
       mount.hidden = false;
       // innerHTML above recreated <details>, so this listener never stacks on a persistent element.
