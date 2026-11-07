@@ -371,13 +371,19 @@ function buildTimeSeries(filenames, responses, contestById) {
     return { ts: stamp.label, t: stamp.t, day: stamp.day, dayKey: stamp.dayKey, voteMap };
   });
 
+  // A drop contributes to a contest only when it reports every candidate in
+  // it. Hand-collected extracts (see data/<eid>/README.md) cover a handful of
+  // contests; on those drops the rest of the ballot is unknown, not zero.
   const series = new Map();
   for (const [contestId, contest] of contestById) {
-    series.set(contestId, parsedDrops.map(({ ts, t, day, dayKey, voteMap }) => {
+    const points = [];
+    for (const { ts, t, day, dayKey, voteMap } of parsedDrops) {
+      if (!contest.candidateIds.every(cid => voteMap.has(cid))) continue;
       const votes = {};
-      for (const cid of contest.candidateIds) votes[cid] = voteMap.get(cid) ?? 0;
-      return { ts, t, day, dayKey, votes };
-    }));
+      for (const cid of contest.candidateIds) votes[cid] = voteMap.get(cid);
+      points.push({ ts, t, day, dayKey, votes });
+    }
+    series.set(contestId, points);
   }
 
   return series;

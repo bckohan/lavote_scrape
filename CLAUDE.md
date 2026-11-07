@@ -45,6 +45,8 @@ The workflow (`.github/workflows/scrape.yml`) uses `concurrency: cancel-in-progr
 
 **index.json**: Maintained by the scraper and kept at the repo root. It is the manifest listing elections and result files; every path in it is relative to the repo root (e.g. `data/4338/4338_....json`). The `update_index()` and `backfill_index()` functions in `scrape.py` keep it current. When `--commit` is used, `index.json` is committed alongside each new result file.
 
+**Partial drops**: A result file contributes a point to a contest only if it has a `CAND` row for every candidate in that contest; files that cover a subset of contests (hand-collected extracts under `data/4300/` and `data/4316/`, see their READMEs) leave the other contests untouched rather than zeroing them. Files under `data/{eid}/partials/` are kept out of `index.json` entirely.
+
 **Routing**: Hash-based. `#/` = contest index; `#/{eid}/{contestId}` = contest detail.
 
 **Projections**: Optional model projections rendered behind a switch. scrape.py and scrape.yml are never involved in projections.
